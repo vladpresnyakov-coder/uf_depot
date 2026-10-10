@@ -1,0 +1,711 @@
+<title>Узел коагуляции перед УФ — прототип</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500&display=swap">
+<style>
+/* Layout: engineering workbench — fixed left rail (screen map), working sheet on the right; outputs sit beside inputs as "calc sheets". */
+:root{
+  --bg:#f3f5f6; --sheet:#ffffff; --ink:#18232b; --ink2:#4d5d68; --line:#d5dde2; --soft:#e9eef1;
+  --accent:#0b6e8a; --accent-soft:#dcedf2;
+  --good:#2f7d4f; --good-soft:#e1f1e7; --warn:#a4620a; --warn-soft:#fbefd9; --bad:#b23b2e; --bad-soft:#f8e2df;
+  --demo:#6b4fa3; --demo-soft:#ece6f6;
+  --f-display:"IBM Plex Sans Condensed","Noto Sans SC","Arial Narrow",sans-serif;
+  --f-body:"IBM Plex Sans","Noto Sans SC",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1519; --sheet:#162026; --ink:#e3eaee; --ink2:#9fb0ba; --line:#2b3a43; --soft:#1d2a31;
+  --accent:#4fb3d0; --accent-soft:#16323c; --good:#6cc08f; --good-soft:#173226; --warn:#e2a54c; --warn-soft:#3a2b14;
+  --bad:#ec8275; --bad-soft:#3b1d19; --demo:#b59ae6; --demo-soft:#2a2240; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1519; --sheet:#162026; --ink:#e3eaee; --ink2:#9fb0ba; --line:#2b3a43; --soft:#1d2a31;
+  --accent:#4fb3d0; --accent-soft:#16323c; --good:#6cc08f; --good-soft:#173226; --warn:#e2a54c; --warn-soft:#3a2b14;
+  --bad:#ec8275; --bad-soft:#3b1d19; --demo:#b59ae6; --demo-soft:#2a2240; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.5}
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--sheet);border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;padding:10px 16px}
+.brand{font-family:var(--f-display);font-weight:600;font-size:17px;letter-spacing:.01em}
+.brand small{font-family:var(--f-mono);font-weight:400;font-size:11px;color:var(--ink2);margin-left:6px}
+.demo-flag{font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;background:var(--demo-soft);color:var(--demo);border:1px solid var(--demo);padding:2px 8px;border-radius:3px}
+.spacer{flex:1}
+.lang{display:flex;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.lang button{border:0;background:transparent;color:var(--ink2);padding:4px 10px;font:500 12px var(--f-mono);cursor:pointer}
+.lang button[aria-pressed="true"]{background:var(--accent);color:#fff}
+.wrap{display:grid;grid-template-columns:240px minmax(0,1fr);min-height:calc(100% - 52px)}
+nav.rail{border-right:1px solid var(--line);padding:16px 0;background:var(--sheet)}
+.rail h4{font:600 11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink2);margin:14px 16px 4px}
+.rail a{display:flex;gap:8px;align-items:baseline;padding:5px 16px;color:var(--ink);text-decoration:none;font-size:13px;border-left:3px solid transparent}
+.rail a .n{font:400 11px var(--f-mono);color:var(--ink2);width:18px;flex:none}
+.rail a:hover{background:var(--soft)}
+.rail a[aria-current="page"]{border-left-color:var(--accent);background:var(--accent-soft);font-weight:500}
+main{padding-block:24px 64px;padding-inline:clamp(16px,3vw,40px);min-width:0}
+h1{font-family:var(--f-display);font-weight:600;font-size:26px;line-height:1.2;margin:0 0 4px;text-wrap:balance}
+h2{font-family:var(--f-display);font-weight:600;font-size:19px;margin:0 0 10px}
+h3{font-size:14px;font-weight:600;margin:0 0 8px}
+.lead{color:var(--ink2);max-width:72ch;margin:0 0 20px}
+.eyebrow{font:500 11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:6px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:20px;align-items:start}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:16px}
+.panel{background:var(--sheet);border:1px solid var(--line);border-radius:6px;padding:18px;min-width:0}
+.panel + .panel{margin-top:0}
+.stack{display:flex;flex-direction:column;gap:20px}
+.calc{background:var(--soft);border:1px solid var(--line);border-radius:6px;padding:16px;min-width:0}
+.calc h3{font-family:var(--f-mono);font-weight:500;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2)}
+.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:12px 16px}
+.f label{display:block;font-size:12px;color:var(--ink2);margin-bottom:3px}
+.f label .req{color:var(--bad)}
+.f .row{display:flex;gap:6px;align-items:center}
+.f input,.f select,.f textarea{width:100%;min-width:0;font:400 14px var(--f-body);padding:6px 8px;border:1px solid var(--line);border-radius:4px;background:var(--sheet);color:var(--ink)}
+.f input[type=number],.f input.num{font-family:var(--f-mono);text-align:right}
+.f .u{font:400 12px var(--f-mono);color:var(--ink2);white-space:nowrap;min-width:46px}
+.f .hint{font-size:11.5px;color:var(--ink2);margin-top:3px}
+.f.missing input{border-color:var(--warn);background:var(--warn-soft)}
+input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+details{border-top:1px dashed var(--line);margin-top:14px;padding-top:10px}
+summary{cursor:pointer;font-weight:500;font-size:13px;color:var(--accent)}
+.btn{font:500 13px var(--f-body);border:1px solid var(--accent);background:var(--accent);color:#fff;padding:7px 14px;border-radius:4px;cursor:pointer;text-decoration:none;display:inline-block}
+.btn.ghost{background:transparent;color:var(--accent)}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.seg label{padding:6px 12px;cursor:pointer;font-size:13px;border-right:1px solid var(--line)}
+.seg label:last-child{border-right:0}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label:has(input:checked){background:var(--accent);color:#fff}
+.seg label:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:-2px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+.tw{overflow-x:auto;max-width:100%}
+th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+th{font-weight:500;font-size:12px;color:var(--ink2);background:var(--soft)}
+td.n,th.n{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.basis{font:400 11px var(--f-mono);color:var(--accent);background:var(--accent-soft);padding:1px 5px;border-radius:3px;white-space:nowrap}
+.pill{display:inline-flex;align-items:center;gap:5px;font:500 11.5px var(--f-body);padding:2px 8px;border-radius:999px;white-space:nowrap;border:1px solid}
+.pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.s-user{color:var(--accent);background:var(--accent-soft);border-color:var(--accent)}
+.s-balance{color:var(--good);background:var(--good-soft);border-color:var(--good)}
+.s-prelim{color:var(--demo);background:var(--demo-soft);border-color:var(--demo)}
+.s-clarify{color:var(--warn);background:var(--warn-soft);border-color:var(--warn)}
+.s-incomplete,.s-nodata{color:var(--bad);background:var(--bad-soft);border-color:var(--bad)}
+.msg{border-left:3px solid;padding:8px 12px;border-radius:0 4px 4px 0;font-size:13px;margin:8px 0}
+.msg.warn{border-color:var(--warn);background:var(--warn-soft)}
+.msg.bad{border-color:var(--bad);background:var(--bad-soft)}
+.msg.info{border-color:var(--accent);background:var(--accent-soft)}
+.msg.demo{border-color:var(--demo);background:var(--demo-soft)}
+.msg b{font-weight:600}
+.stub{background:repeating-linear-gradient(135deg,var(--demo-soft) 0 8px,transparent 8px 16px);border:1px dashed var(--demo);border-radius:6px;padding:14px}
+.kv{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 16px;font-size:13px}
+.kv dt{color:var(--ink2)} .kv dd{margin:0;font-family:var(--f-mono);text-align:right;font-variant-numeric:tabular-nums}
+.steps{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 20px;padding:0;list-style:none}
+.steps a{display:flex;gap:6px;align-items:center;text-decoration:none;color:var(--ink2);font-size:12.5px;border:1px solid var(--line);border-radius:4px;padding:4px 10px;background:var(--sheet)}
+.steps a[aria-current="step"]{border-color:var(--accent);color:var(--ink);background:var(--accent-soft)}
+.steps .dot{width:8px;height:8px;border-radius:50%;background:var(--line)}
+.steps .ok{background:var(--good)} .steps .wn{background:var(--warn)} .steps .er{background:var(--bad)}
+.formula{font-family:var(--f-mono);font-size:12.5px;background:var(--sheet);border:1px solid var(--line);border-radius:4px;padding:6px 10px;margin:6px 0;overflow-x:auto;white-space:nowrap}
+.tool-card{display:flex;flex-direction:column;gap:6px}
+.tool-card .st{font:500 11px var(--f-mono);letter-spacing:.06em;text-transform:uppercase}
+.hero{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:28px;align-items:center;margin-bottom:28px}
+.hero h1{font-size:clamp(26px,3.6vw,38px)}
+.svgbox{overflow-x:auto;background:var(--sheet);border:1px solid var(--line);border-radius:6px;padding:8px}
+.svgbox svg{display:block;min-width:900px;width:100%;height:auto}
+.svgbox.small svg{min-width:640px}
+.tkp{background:var(--sheet);border:1px solid var(--line);border-radius:6px;padding:28px;max-width:1000px}
+.tkp-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;border-bottom:2px solid var(--ink);padding-bottom:12px;margin-bottom:18px}
+.figs{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr));gap:12px;margin:16px 0}
+.fig{border:1px solid var(--line);border-radius:4px;padding:10px 12px}
+.fig .v{font:500 20px var(--f-mono);font-variant-numeric:tabular-nums}
+.fig .l{font-size:12px;color:var(--ink2)}
+.note-doc{max-width:78ch}
+.note-doc h3{font-family:var(--f-display);font-size:16px;margin:22px 0 6px}
+.note-doc p{margin:0 0 8px}
+.tree{list-style:none;padding-left:0;margin:0;font-size:13px}
+.tree ul{list-style:none;padding-left:20px;border-left:1px dashed var(--line);margin:4px 0 4px 6px}
+.tree li{padding:3px 0}
+.tag{font:500 12px var(--f-mono)}
+.muted{color:var(--ink2)}
+.mono{font-family:var(--f-mono)}
+.small{font-size:12px}
+.footnote{font-size:12px;color:var(--ink2);margin-top:12px}
+@media (max-width:820px){.wrap{grid-template-columns:1fr} nav.rail{border-right:0;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:2px;padding:8px 8px} .rail h4{width:100%;margin:6px 8px 2px} .rail a{border-left:0;border-radius:4px;padding:4px 8px} .hero{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<header class="top">
+  <div class="brand">UF Depot <small>· Коагуляция перед УФ</small></div>
+  <span class="demo-flag" id="demoflag">ПРОТОТИП · ДЕМО-ДАННЫЕ</span>
+  <div class="spacer"></div>
+  <div class="lang" role="group" aria-label="Язык">
+    <button type="button" data-lang="ru" aria-pressed="true">RU</button>
+    <button type="button" data-lang="en" aria-pressed="false">EN</button>
+    <button type="button" data-lang="zh" aria-pressed="false">中文</button>
+  </div>
+</header>
+<div class="wrap">
+  <nav class="rail" id="rail" aria-label="Карта экранов"></nav>
+  <main id="main"></main>
+</div>
+
+<script>
+"use strict";
+/* ============ i18n (в прототипе переведены навигация и заголовки) ============ */
+const I18N={
+ ru:{g_pub:"Публичная часть",g_acc:"Кабинет",g_wiz:"Мастер расчёта",g_out:"Результаты и документы",g_fut:"Будущие этапы",
+  home:"Главная",login:"Вход / регистрация",cabinet:"Мои проекты",project:"Проект и структура",
+  water:"Исходная вода и импорт",coag:"Коагулянт и паспорт",dose:"Режим дозирования",ph:"Коррекция pH",contact:"Смешение и камеры",pipe:"Труба и насосы",
+  results:"Результаты расчёта",compare:"Сравнение вариантов",tkp:"Визуализация для ТКП",pid:"P&ID",note:"Записка и спецификация",export:"Экспорт",journal:"Журнал (концепция)",demo:"ПРОТОТИП · ДЕМО-ДАННЫЕ",i18n:""},
+ en:{g_pub:"Public",g_acc:"Account",g_wiz:"Calculation wizard",g_out:"Results & documents",g_fut:"Future stages",
+  home:"Home",login:"Sign in / Sign up",cabinet:"My projects",project:"Project structure",
+  water:"Raw water & import",coag:"Coagulant & datasheet",dose:"Dosing mode",ph:"pH correction",contact:"Mixing & chambers",pipe:"Pipe & dosing pumps",
+  results:"Calculation results",compare:"Compare variants",tkp:"Proposal view",pid:"P&ID",note:"Design note & BOM",export:"Export",journal:"Operating log (concept)",demo:"PROTOTYPE · DEMO DATA",i18n:"Prototype: navigation and headings are translated; body text stays in Russian."},
+ zh:{g_pub:"公开页面",g_acc:"个人中心",g_wiz:"计算向导",g_out:"结果与文件",g_fut:"后续阶段",
+  home:"首页",login:"登录 / 注册",cabinet:"我的项目",project:"项目结构",
+  water:"原水与导入",coag:"混凝剂与产品参数",dose:"投加模式",ph:"pH 调节",contact:"混合与接触池",pipe:"管道与计量泵",
+  results:"计算结果",compare:"方案比较",tkp:"报价方案视图",pid:"P&ID",note:"说明书与设备表",export:"导出",journal:"运行日志（概念）",demo:"原型 · 演示数据",i18n:"原型：仅翻译导航与标题，正文保持俄语。"}
+};
+let LANG="ru"; const t=k=>(I18N[LANG]&&I18N[LANG][k])||I18N.ru[k]||k;
+const ROUTES=[
+ ["g_pub",[["home",1],["login",2]]],
+ ["g_acc",[["cabinet",3],["project","4–5"]]],
+ ["g_wiz",[["water",7],["coag",8],["dose",9],["ph",10],["contact",11],["pipe",12]]],
+ ["g_out",[["results",13],["compare",14],["tkp",15],["pid",16],["note",17],["export",18]]],
+ ["g_fut",[["journal",19]]]
+];
+const WIZ=["water","coag","dose","ph","contact","pipe"];
+
+/* ============ Расчётное ядро (материальные балансы; детерминированно) ============ */
+const A={H:1.008,O:15.999,S:32.06,Cl:35.45,Al:26.982,Fe:55.845}; const H2O=2*A.H+A.O, SO4=A.S+4*A.O;
+const REAG={
+ pacl:{label:"ПОХА / PACl — полиоксихлорид алюминия",short:"ПОХА",me:"Al",ox:"Al(III)",salt:null,bases:["metal","Al2O3","product"]},
+ alsulf:{label:"Сульфат алюминия Al₂(SO₄)₃",short:"Al₂(SO₄)₃",me:"Al",ox:"Al(III)",salt:{M:2*A.Al+3*SO4,n:2,f:"Al₂(SO₄)₃"},bases:["metal","Al2O3","salt","hydrate","product"]},
+ fecl3:{label:"Хлорид железа(III) FeCl₃",short:"FeCl₃",me:"Fe",ox:"Fe(III)",salt:{M:A.Fe+3*A.Cl,n:1,f:"FeCl₃"},bases:["metal","salt","hydrate","product"]},
+ fe2so4:{label:"Сульфат железа(III) Fe₂(SO₄)₃",short:"Fe₂(SO₄)₃",me:"Fe",ox:"Fe(III)",salt:{M:2*A.Fe+3*SO4,n:2,f:"Fe₂(SO₄)₃"},bases:["metal","salt","hydrate","product"]},
+ feso4:{label:"Сульфат железа(II) FeSO₄",short:"FeSO₄",me:"Fe",ox:"Fe(II)",salt:{M:A.Fe+SO4,n:1,f:"FeSO₄"},bases:["metal","salt","hydrate","product"]}
+};
+function basisName(r,b,hn){const R=REAG[r];
+ if(b==="metal")return R.me; if(b==="Al2O3")return "Al₂O₃"; if(b==="salt")return R.salt.f+" безв.";
+ if(b==="hydrate")return R.salt.f+"·"+hn+"H₂O"; if(b==="product")return "товарный продукт"; return "?";}
+// массовая доля металла в форме X
+function wMe(r,b,hn){const R=REAG[r];
+ if(b==="metal")return 1;
+ if(b==="Al2O3")return R.me==="Al"?2*A.Al/(2*A.Al+3*A.O):NaN;
+ if(!R.salt)return NaN;
+ const m=R.salt.n*A[R.me];
+ if(b==="salt")return m/R.salt.M;
+ if(b==="hydrate")return (hn>0)?m/(R.salt.M+hn*H2O):NaN;
+ return NaN;}
+const isNum=v=>typeof v==="number"&&isFinite(v);
+
+/* ============ Демо-состояние ============ */
+const PASSPORTS={
+ pacl:{name:"ДЕМО-ПОХА-17",maker:"(демо, производитель не указан)",grade:"жидкий, демо",batch:"",form:"liquid",hydr:"anhydrous",hn:null,c:17,cb:"Al2O3",rho:1.37,basicity:70,bdef:"[OH]/(3·[Al]), мольн. %",freeAcid:null,fe2:null,wPrep:"Разбавление товарного продукта водой",wc:10,wcb:"Al2O3"},
+ fecl3:{name:"ДЕМО-FeCl₃-40",maker:"(демо)",grade:"раствор 40 %",batch:"",form:"liquid",hydr:"anhydrous",hn:null,c:40,cb:"salt",rho:1.42,basicity:null,bdef:"",freeAcid:null,fe2:null,wPrep:"Разбавление товарного продукта водой",wc:20,wcb:"salt"},
+ feso4:{name:"ДЕМО-FeSO₄·7H₂O",maker:"(демо)",grade:"кристаллический",batch:"",form:"solid",hydr:"hydrate",hn:7,c:98,cb:"hydrate",rho:null,basicity:null,bdef:"",freeAcid:null,fe2:null,wPrep:"Растворение твёрдого продукта",wc:100,wcb:"hydrate"},
+ alsulf:{name:"",maker:"",grade:"",batch:"",form:"solid",hydr:"hydrate",hn:18,c:null,cb:"hydrate",rho:null,basicity:null,bdef:"",freeAcid:null,fe2:null,wPrep:"",wc:null,wcb:"hydrate"},
+ fe2so4:{name:"",maker:"",grade:"",batch:"",form:"liquid",hydr:"anhydrous",hn:null,c:null,cb:"salt",rho:null,basicity:null,bdef:"",freeAcid:null,fe2:null,wPrep:"",wc:null,wcb:"salt"}
+};
+const S={
+ project:{name:"ДЕМО — Водоподготовка, линия 1",customer:"Демо-объект (вымышленный)",desc:"Демонстрационный проект. Все числа — пример, не реальный объект."},
+ req:[{p:"SDI15",v:3,u:"—",pt:"ультрафильтрат",type:"SDI15 по ASTM D4189"},{p:"Остаточный Al",v:0.2,u:"мг/л",pt:"ультрафильтрат",type:"общий Al в пробе"},{p:"ПО",v:3,u:"мг O₂/л",pt:"ультрафильтрат",type:"перманганатная окисляемость"}],
+ Q:{mode:"uf",nom:120,min:null,max:null,nTrains:3,qTrain:40,minUser:null,maxUser:null},
+ water:{date:"2026-09-15",id:"ДЕМО-А-0915",ph:7.4,alk:2.1,T:8,turb:6,color:35,po:6.8,tss:8,al:0.05,fe:0.3,o2:null,fe2:null,aer:"no",oxid:"none",oxTime:null},
+ r:"pacl", pp:JSON.parse(JSON.stringify(PASSPORTS)),
+ mode:"manual", dose:{min:1.5,nom:2.5,max:4,basis:"metal",hn:18}, prelimStub:true,
+ ph:{mode:"none",reag:"NaOH",how:"manual",d100:null,w:46,rho:1.49,wc:50,point:"до коагулянта",target:null,curve:[[0,7.1],[5,7.4],[10,7.7],[15,7.95]]},
+ mix:{type:"Статический смеситель",seq:"pH-реагент → коагулянт",calc:"t2v",t:null,tBasis:"",V:null,useK:false,k:null,kBasis:"",qBasis:"max"},
+ pipe:{qBasis:"max",v:null,vBasis:"",mat:"ПВХ-U",din:null},
+ pump:{p:2.5,dp:0.5,margin:null,marginBasis:"",reserve:"1 раб. + 1 рез.",turn:null},
+ fe:{status:"auto",userBasis:""},
+ versions:[], selVersion:null, cmp:[]
+};
+// демо-значения для ручных полей с явной маркировкой (без «основания»)
+S.mix.t=60; S.mix.tBasis="ДЕМО-значение, основание не указано";
+S.pipe.v=1.5; S.pipe.vBasis="ДЕМО-значение, основание не указано";
+
+/* ============ Расчёт ============ */
+// Диапазон расхода: «только коагуляция» — Qном задаёт пользователь, Qmin/Qmax опционально (пусто = Qном);
+// «с установками УФ» — по умолчанию Qmin = 1 рабочая установка, Qном = все рабочие установки; оба значения можно переопределить.
+function effQ(st){const q=st.Q;
+ if(q.mode==="uf"){const one=q.qTrain, all=(isNum(q.qTrain)&&isNum(q.nTrains))?q.qTrain*q.nTrains:NaN;
+  const min=isNum(q.minUser)?q.minUser:one, nom=all, max=isNum(q.maxUser)?q.maxUser:all;
+  return {min,nom,max,src:{min:isNum(q.minUser)?"user":"1 уст.",max:isNum(q.maxUser)?"user":"= Qном"}};}
+ const nom=q.nom; return {min:isNum(q.min)?q.min:nom,nom,max:isNum(q.max)?q.max:nom,src:{min:isNum(q.min)?"user":"= Qном",max:isNum(q.max)?"user":"= Qном"}};}
+function compute(st){
+ const W=[],ASM=[],out={W,ASM}; const r=st.r, R=REAG[r], P=st.pp[r];
+ const Q=effQ(st); out.Q=Q; out.qOk=isNum(Q.min)&&isNum(Q.nom)&&isNum(Q.max)&&Q.min>0&&Q.min<=Q.nom&&Q.nom<=Q.max;
+ if(!out.qOk) W.push(["bad","Расходы: нужно Qmin ≤ Qnom ≤ Qmax, все > 0."]);
+ if(st.Q.mode==="uf"&&out.qOk&&st.Q.nTrains>1) W.push(["warn","Работа одной установки УФ ("+fmt(Q.min)+" м³/ч): насос-дозатор должен обеспечивать равномерный впрыск при минимальной подаче; проверить смешение и скорость в трубопроводе при этом расходе."]);
+ // паспорт
+ let wProd=NaN; if(isNum(P.c)&&P.c>0&&P.cb){ wProd=P.c/100*(P.cb==="product"?NaN:wMe(r,P.cb,P.hn)); }
+ out.pass={ok:isFinite(wProd)&&wProd>0,wProd};
+ if(!out.pass.ok) W.push(["bad","Паспорт продукта: укажите концентрацию и её базу. Без базы концентрация не принимается."]);
+ if(out.pass.ok&&P.c>100) W.push(["bad","Концентрация > 100 % масс."]);
+ if(P.form==="liquid"&&!isNum(P.rho)) W.push(["warn","Нет плотности товарного раствора — л/ч товарного продукта не рассчитываются."]);
+ if(P.form==="liquid"&&isNum(P.rho)&&(P.rho<0.8||P.rho>2)) W.push(["warn","Плотность вне 0,8–2,0 кг/л — проверьте паспорт."]);
+ // дозы
+ const D=st.dose; const toMe=x=>{ if(!isNum(x))return NaN; if(D.basis==="product")return x*wProd; return x*wMe(r,D.basis,D.hn);};
+ out.dMe={min:toMe(D.min),nom:toMe(D.nom),max:toMe(D.max)};
+ out.doseOk=st.mode==="manual"?(isFinite(out.dMe.min)&&isFinite(out.dMe.nom)&&isFinite(out.dMe.max)):false;
+ if(st.mode==="manual"&&out.doseOk&&!(out.dMe.min<=out.dMe.nom&&out.dMe.nom<=out.dMe.max)) W.push(["bad","Дозы: нужно Dmin ≤ Dnom ≤ Dmax."]);
+ if(st.mode==="prelim"){ if(r==="pacl"&&st.prelimStub){ out.prelim="stub"; } else out.prelim="nodata"; }
+ const dStatus= st.mode==="manual"?(out.doseOk?"user":"incomplete"):(out.prelim==="stub"?"prelim":"nodata");
+ out.dStatus=dStatus;
+ // пересчёт дозы по базам (Dnom)
+ const bases=R.bases.map(b=>b==="hydrate"?{b,hn:(D.basis==="hydrate"?D.hn:(r==="feso4"?7:(r==="alsulf"?18:(r==="fecl3"?6:9))))}:{b});
+ out.doseTable=bases.map(x=>{const w=x.b==="product"?wProd:wMe(r,x.b,x.hn);return {name:basisName(r,x.b,x.hn),min:out.dMe.min/w,nom:out.dMe.nom/w,max:out.dMe.max/w};});
+ // расходы
+ const wc=P.wc, wcb=P.wcb; let cWorkMe=NaN; if(isNum(wc)&&wc>0){cWorkMe = wcb==="product"? wc*wProd : wc*wMe(r,wcb,P.hn);}
+ const flow=(dMe,q)=>{const Mme=dMe*q/1000, Dp=dMe/wProd, Mp=Dp*q/1000;
+  return {Mme,Dp,Mp,Lp:(P.form==="liquid"&&isNum(P.rho))?Mp/P.rho:NaN,Lw:isFinite(cWorkMe)?dMe*q/cWorkMe:NaN};};
+ out.flows=["min","nom","max"].map(k=>({k,q:Q[k],...flow(out.dMe.nom,Q[k])}));
+ out.pumpC={qmin:flow(out.dMe.min,Q.min).Lw,qnom:flow(out.dMe.nom,Q.nom).Lw,qmax:flow(out.dMe.max,Q.max).Lw};
+ if(!isFinite(cWorkMe)) W.push(["warn","Не задана концентрация рабочего раствора с базой — подача насоса коагулянта не рассчитывается."]);
+ if(r==="pacl") ASM.push("Для ПОХА расход показан отдельно по Al, Al₂O₃ и товарному продукту; поле «100 % ПОХА» не используется.");
+ // щёлочность (стехиометрия)
+ const eqPerMg = R.me==="Al"? 3/A.Al : (R.ox==="Fe(III)"? 3/A.Fe : 2/A.Fe);
+ let alkF=eqPerMg; if(r==="pacl"){ if(isNum(P.basicity)&&P.bdef){alkF=eqPerMg*(1-P.basicity/100);} else alkF=NaN; }
+ out.alk={f:alkF,cons:out.dMe.nom*alkF,cmax:out.dMe.max*alkF,water:st.water.alk};
+ if(r==="pacl"&&!isFinite(alkF)) W.push(["warn","Для баланса щёлочности ПОХА нужны основность и её определение."]);
+ if(isFinite(out.alk.cmax)&&isNum(st.water.alk)&&out.alk.cmax>st.water.alk) W.push(["warn","Теоретический расход щёлочности при Dmax превышает щёлочность исходной воды — требуется уточнение режима (стехиометрическая оценка, не прогноз pH)."]);
+ if(!isNum(P.freeAcid)) ASM.push("Свободная кислотность продукта не задана и не учтена в балансе щёлочности.");
+ ASM.push("Баланс щёлочности: принят полный гидролиз до M(OH)₃ (допущение M-06); pH по нему не прогнозируется.");
+ // FeSO4
+ if(r==="feso4"){ const w=st.water; const miss=[];
+  if(!isNum(w.o2)&&w.oxid==="none") miss.push("растворённый кислород или окислитель");
+  if(!isNum(w.ph)) miss.push("pH"); if(!isNum(w.T)) miss.push("температура"); if(!isNum(st.mix.t)&&!isNum(st.mix.V)) miss.push("контактное время");
+  let fs; if(st.fe.status==="user") fs="user"; else if(miss.length) fs="nodata"; else fs="clarify";
+  out.feso4={status:fs,miss,o2need:out.dMe.max*A.O*2/(4*A.Fe)};
+  if(isNum(w.o2)&&isFinite(out.feso4.o2need)&&out.feso4.o2need>w.o2) W.push(["warn","Стехиометрическая потребность в O₂ при Dmax ("+fmt(out.feso4.o2need)+" мг/л) больше растворённого O₂ ("+fmt(w.o2)+" мг/л)."]);
+  W.push(["bad","FeSO₄ (железо II): завершённость окисления Fe²⁺ → Fe³⁺ расчётом не подтверждена; проверенная модель не подключена. Безусловная рекомендация применения не выдаётся."]);
+ }
+ // pH-коррекция
+ const ph=st.ph; out.ph={mode:ph.mode};
+ if(ph.mode==="acid"||ph.mode==="base"){ let d=NaN, src="";
+  if(ph.how==="manual"){ d=ph.d100; src="user"; }
+  else { const c=[...ph.curve].filter(p=>isNum(p[0])&&isNum(p[1])).sort((a,b)=>a[1]-b[1]); const tg=ph.target;
+   if(isNum(tg)&&c.length>=2&&tg>=c[0][1]&&tg<=c[c.length-1][1]){ for(let i=1;i<c.length;i++){ if(tg<=c[i][1]){const[a,b]=[c[i-1],c[i]]; d=a[0]+(tg-a[1])*(b[0]-a[0])/(b[1]-a[1]); break;} } src="curve"; }
+   else { src="out"; W.push(["warn","Целевой pH вне диапазона титрационной кривой — доза не определяется (экстраполяция запрещена)."]); } }
+  const qs=["min","nom","max"].map(k=>{const M100=d*Q[k]/1000, Mc=M100/(ph.w/100), Lc=isNum(ph.rho)?Mc/ph.rho:NaN, Lw=isNum(ph.wc)?d*Q[k]/ph.wc:NaN; return {k,q:Q[k],M100,Mc,Lc,Lw};});
+  out.ph={mode:ph.mode,d,src,qs,ok:isFinite(d)};
+  if(!isFinite(d)) W.push(["warn","Доза "+(ph.mode==="acid"?"кислоты":"щёлочи")+" не задана: точный расход по разности pH не рассчитывается — нужна ручная доза или титрационная зависимость."]);
+ } else if(ph.mode==="unknown"){ W.push(["warn","Необходимость коррекции pH не определена: недостаточно данных."]); }
+ // контактные камеры
+ const m=st.mix, qd=Q[m.qBasis]; let Ve=NaN,t=NaN;
+ if(m.calc==="t2v"){ if(isNum(m.t)&&isNum(qd)){Ve=qd*m.t/3600;} } else { if(isNum(m.V)){Ve=m.V;} }
+ const k=(m.useK&&isNum(m.k)&&m.k>0&&m.k<=1)?m.k:null;
+ if(m.useK&&!k) W.push(["bad","Коэффициент k должен быть в (0; 1]."]);
+ if(m.useK&&k&&!m.kBasis) W.push(["warn","Для k не указано основание — применён как допущение пользователя."]);
+ const Vg=k?Ve/k:Ve;
+ out.ch={qd,Ve,Vg,k,times:["min","nom","max"].map(x=>({k:x,q:Q[x],t:isFinite(Ve)?3600*Ve/Q[x]:NaN}))};
+ if(!m.tBasis||/ДЕМО/.test(m.tBasis)) W.push(["warn","Контактное время не обосновано. Объём рассчитан по заданному времени; технологическая достаточность не подтверждена."]);
+ ASM.push("Камеры: 1 рабочая + 1 резервная, каждая на 100 % расчётного расхода; резервная не входит в контактный объём (Р7).");
+ if(!k) ASM.push("Коэффициент использования объёма k не применяется: Vгеом = Vэфф.");
+ // труба
+ const pp=st.pipe, qp=Q[pp.qBasis]; const dCalc=(isNum(qp)&&isNum(pp.v)&&pp.v>0)?Math.sqrt(4*(qp/3600)/(Math.PI*pp.v))*1000:NaN;
+ const vAt=q=>isNum(pp.din)&&pp.din>0?4*(q/3600)/(Math.PI*(pp.din/1000)**2):NaN;
+ out.pipe={qp,dCalc,vs:["min","nom","max"].map(x=>({k:x,q:Q[x],v:vAt(Q[x])}))};
+ if(!isNum(pp.din)) W.push(["warn","Стандартный типоразмер не выбран: показан расчётный внутренний диаметр; нужен каталог трубы."]);
+ ASM.push("Потери давления в трубопроводе не рассчитываются (полный гидравлический расчёт вне v1).");
+ // насосы
+ const pu=st.pump; const pReq=(isNum(pu.p)?pu.p:NaN)+(isNum(pu.dp)?pu.dp:0);
+ const mk=(o)=>{const top=isNum(pu.margin)?o.qmax*(1+pu.margin/100):NaN; return {...o,top,turn:o.qmax/o.qmin,p:pReq};};
+ out.pumps=[{tag:"P-101A/B",name:"Насос-дозатор коагулянта",...mk(out.pumpC),mat:R.me==="Fe"?"Хлорид/сульфат железа: проточная часть из стойких к кислым растворам материалов (уточнить по паспорту)":"Проточная часть, стойкая к ПОХА / сульфату Al (уточнить по паспорту)"}];
+ if(out.ph.ok){ const d=out.ph.d; const Lw=q=>isNum(ph.wc)?d*q/ph.wc:NaN; out.pumps.push({tag:"P-102A/B",name:"Насос-дозатор "+(ph.mode==="acid"?"кислоты ("+ph.reag+")":"щёлочи ("+ph.reag+")"),...mk({qmin:Lw(Q.min),qnom:Lw(Q.nom),qmax:Lw(Q.max)}),mat:"Уточнить по реагенту "+ph.reag}); }
+ if(!isNum(pu.margin)) W.push(["warn","Проектный запас насосов не задан — верх рекомендуемого диапазона не определён."]);
+ // статус результата
+ const hasBad=W.some(w=>w[0]==="bad");
+ out.status= !out.qOk||!out.pass.ok? "incomplete" : (dStatus==="nodata"?"nodata": dStatus==="incomplete"?"incomplete": (r==="feso4"||W.length? "clarify" : dStatus));
+ if(dStatus==="prelim"&&out.status!=="incomplete") out.status="prelim";
+ out.hasBad=hasBad; return out;
+}
+const STATUS={user:["s-user","Задано пользователем"],prelim:["s-prelim","Предварительная оценка"],clarify:["s-clarify","Требуется уточнение"],incomplete:["s-incomplete","Расчёт не завершён"],nodata:["s-nodata","Недостаточно данных"],balance:["s-balance","Материальный баланс"]};
+const pill=s=>`<span class="pill ${STATUS[s][0]}">${STATUS[s][1]}</span>`;
+function fmt(x,sig=3){ if(!isNum(x))return "—"; const a=Math.abs(x); const d=a===0?0:(a>=100?1:a>=10?2:a>=1?2:a>=0.1?3:4); return x.toLocaleString(LANG==="ru"?"ru-RU":LANG==="zh"?"zh-CN":"en-US",{maximumFractionDigits:d,minimumFractionDigits:0}); }
+const QL={min:"Qmin",nom:"Qnom",max:"Qmax"};
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* ============ Поля ============ */
+function getP(p){return p.split(".").reduce((o,k)=>o?.[k],S);}
+function setP(p,v){const ks=p.split("."),last=ks.pop();const o=ks.reduce((o,k)=>o[k],S);o[last]=v;}
+function num(p,label,u,o={}){const v=getP(p);const miss=o.req&&!isNum(v);
+ return `<div class="f${miss?" missing":""}"><label for="${p}">${label}${o.req?' <span class="req">*</span>':""}</label><div class="row"><input id="${p}" class="num" inputmode="decimal" data-k="${p}" data-t="num" value="${isNum(v)?String(v).replace(".",","):""}" placeholder="${o.ph||"нет данных"}">${u?`<span class="u">${u}</span>`:""}</div>${o.hint?`<div class="hint">${o.hint}</div>`:""}</div>`;}
+function txt(p,label,o={}){const v=getP(p);return `<div class="f"><label for="${p}">${label}${o.req?' <span class="req">*</span>':""}</label><input id="${p}" data-k="${p}" data-t="txt" value="${esc(v)}" placeholder="${o.ph||""}">${o.hint?`<div class="hint">${o.hint}</div>`:""}</div>`;}
+function sel(p,label,opts,o={}){const v=getP(p);return `<div class="f"><label for="${p}">${label}${o.req?' <span class="req">*</span>':""}</label><select id="${p}" data-k="${p}" data-t="${o.t||"txt"}" data-full="1">${opts.map(([k,l])=>`<option value="${k}"${String(k)===String(v)?" selected":""}>${l}</option>`).join("")}</select>${o.hint?`<div class="hint">${o.hint}</div>`:""}</div>`;}
+function seg(p,opts){const v=getP(p);return `<div class="seg" role="radiogroup">${opts.map(([k,l])=>`<label><input type="radio" name="${p}" data-k="${p}" data-t="txt" data-full="1" value="${k}"${k===v?" checked":""}>${l}</label>`).join("")}</div>`;}
+const live=(name)=>`<div data-live="${name}">${LIVE[name]()}</div>`;
+function msgs(list){return list.map(([c,m])=>`<div class="msg ${c}">${m}</div>`).join("");}
+
+/* ============ Экраны ============ */
+const LIVE={};
+const V={};
+let C=compute(S);
+
+V.home=()=>`
+<section class="hero">
+ <div><div class="eyebrow">Инженерная платформа по ультрафильтрации</div>
+  <h1>Расчёт узла непосредственной коагуляции перед УФ — с прослеживаемыми допущениями</h1>
+  <p class="lead">Дозы и расходы коагулянта, кислоты и щёлочи, контактные камеры, трубопровод и насосы-дозаторы. ТКП, принципиальная P&ID и пояснительная записка из одной сохранённой версии расчёта.</p>
+  <div class="btns"><a class="btn" href="#login">Создать расчёт</a><a class="btn ghost" href="#results">Открыть демо-проект</a></div></div>
+ <div class="panel"><h3>Как устроен расчёт</h3><ol class="small" style="margin:0;padding-left:18px;display:grid;gap:6px">
+  <li>Проект → источник воды → линия.</li><li>Анализ воды и паспорт реагента с базой концентрации.</li>
+  <li>Доза: заданная или предварительная оценка (только при зарегистрированной методике).</li><li>Оборудование, версия расчёта, документы.</li></ol>
+  <div class="msg info small" style="margin-top:12px">Целевые показатели качества хранятся как требования. Их достижение расчётом не подтверждается.</div></div>
+</section>
+<h2>Инструменты</h2>
+<div class="grid3">
+ <div class="panel tool-card"><span class="st" style="color:var(--good)">Доступно в v1</span><h3>Узел коагуляции перед УФ</h3><p class="small muted" style="margin:0">ПОХА, FeCl₃, Fe₂(SO₄)₃, Al₂(SO₄)₃, FeSO₄. Пересчёты доз, расходы, камеры, труба, насосы, документы.</p></div>
+ <div class="panel tool-card"><span class="st muted">Будущий этап</span><h3>Гидравлическая нагрузка на мембраны</h3><p class="small muted" style="margin:0">Данные установки УФ уже хранятся в проекте.</p></div>
+ <div class="panel tool-card"><span class="st muted">Будущий этап</span><h3>Массовая нагрузка по ВВ</h3><p class="small muted" style="margin:0">С раздельным учётом исходных ВВ и образующихся твёрдых продуктов.</p></div>
+ <div class="panel tool-card"><span class="st muted">Этап 3</span><h3>Эксплуатационный журнал</h3><p class="small muted" style="margin:0">Анализы, фактические дозы, история режима.</p></div>
+</div>
+<p class="footnote">Демо-проект открывается только для чтения и не содержит чужих данных. Анонимный расчёт — на согласовании (Р4).</p>`;
+
+V.login=()=>`
+<h1>Вход и регистрация</h1><p class="lead">Два способа входа, один аккаунт. Привязка второго способа — только из активной сессии (Р3).</p>
+<div class="grid2">
+ <form class="panel" onsubmit="event.preventDefault();go('cabinet')"><h2>E-mail</h2>
+  <div class="fields"><div class="f"><label for="em">E-mail <span class="req">*</span></label><input id="em" type="email" value="demo@example.com"></div>
+  <div class="f"><label for="pw">Пароль <span class="req">*</span></label><input id="pw" type="password" value="demo-password"><div class="hint">Не менее 10 символов</div></div></div>
+  <div class="btns"><button class="btn" type="submit">Войти</button><button class="btn ghost" type="button" onclick="go('cabinet')">Зарегистрироваться</button></div>
+  <p class="footnote">После регистрации — письмо с подтверждением. Экспорт отчётов доступен после подтверждения e-mail.</p></form>
+ <div class="panel"><h2>Telegram</h2>
+  <p class="small">Кнопка Telegram Login Widget. Подпись данных проверяется на сервере токеном бота. Telegram не передаёт e-mail.</p>
+  <div class="btns"><button class="btn" type="button" style="background:#2a8bc4;border-color:#2a8bc4" onclick="go('cabinet')">Войти через Telegram (имитация)</button></div>
+  <div class="msg info small">Новый пользователь Telegram получает аккаунт без e-mail и баннер «Добавьте e-mail для восстановления доступа».</div>
+  <div class="msg warn small"><b>Ошибка-пример:</b> «Этот e-mail уже зарегистрирован. Войдите по e-mail и привяжите Telegram в профиле».</div>
+  <p class="footnote">Внешние настройки: бот в @BotFather, команда /setdomain с доменом сайта, TELEGRAM_BOT_TOKEN в переменных окружения.</p></div>
+</div>`;
+
+V.cabinet=()=>`
+<h1>Мои проекты</h1><p class="lead">Проекты принадлежат пользователю; доступ проверяется на сервере.</p>
+<div class="panel"><div class="tw"><table><thead><tr><th>Проект</th><th>Объект</th><th class="n">Линий</th><th class="n">Версий</th><th>Изменён</th><th>Статус последней версии</th></tr></thead><tbody>
+<tr><td><a href="#project">${esc(S.project.name)}</a></td><td>${esc(S.project.customer)}</td><td class="n">1</td><td class="n">${S.versions.length}</td><td class="mono small">2026-10-10</td><td>${pill(C.status)}</td></tr>
+</tbody></table></div><div class="btns"><a class="btn" href="#project">Создать проект</a></div></div>
+<div class="panel" style="margin-top:20px"><h3>Пустое состояние</h3><p class="muted small" style="margin:0">«Проектов пока нет. Создайте проект или откройте демо-проект (только чтение)».</p></div>`;
+
+V.project=()=>`
+<h1>Проект и структура</h1><p class="lead">Несколько источников воды и линий в одном проекте. Требования к качеству задаются здесь.</p>
+<div class="grid2">
+ <div class="stack"><div class="panel"><h2>Сведения</h2><div class="fields">${txt("project.name","Название проекта",{req:1})}${txt("project.customer","Заказчик / объект")}</div><div class="fields" style="margin-top:12px">${txt("project.desc","Описание")}</div></div>
+ <div class="panel"><h2>Требования к качеству</h2>
+  <div class="tw"><table><thead><tr><th>Показатель</th><th class="n">Значение</th><th>Контрольная точка</th><th>Тип пробы</th><th>Статус</th></tr></thead><tbody>
+  ${S.req.map(q=>`<tr><td>${q.p}</td><td class="n">≤ ${fmt(q.v)} ${q.u}</td><td>${q.pt}</td><td class="small">${q.type}</td><td><span class="pill s-clarify">Не подтверждено</span></td></tr>`).join("")}</tbody></table></div>
+  <div class="msg warn">Требование задано. Достижение расчётом не подтверждено; требуется проверка.</div>
+  <p class="footnote">Металл в лабораторно отфильтрованной пробе перед УФ и металл в ультрафильтрате — разные контрольные точки и не смешиваются.</p></div></div>
+ <div class="panel"><h2>Структура</h2><ul class="tree">
+  <li><b>${esc(S.project.name)}</b><ul>
+   <li>Источник воды: Поверхностный водозабор (демо)<ul><li>Анализ ${esc(S.water.id)} · ${S.water.date}</li></ul></li>
+   <li>Линия 1 · Q ${fmt(C.Q.min)}/${fmt(C.Q.nom)}/${fmt(C.Q.max)} м³/ч<ul>
+    <li>Узел коагуляции · ${REAG[S.r].short}</li>
+    <li>Установка УФ <span class="muted small">— хранение данных для будущих инструментов</span></li>
+    <li>Расчёты: ${S.versions.map(v=>`<a href="#results" onclick="S.selVersion=${v.n}">в.${v.n}</a>`).join(", ")||"нет версий"}</li></ul></li>
+   <li class="muted">+ Добавить источник · + Добавить линию</li></ul></li></ul>
+  <div class="btns"><a class="btn" href="#water">Новый расчёт на линии 1</a></div></div>
+</div>`;
+
+function stepsBar(cur){const st={water:C.qOk?"ok":"er",coag:C.pass.ok?(S.r==="feso4"?"wn":"ok"):"er",dose:C.dStatus==="user"||C.dStatus==="prelim"?"ok":"er",ph:C.ph.mode==="none"||C.ph.ok?"ok":"wn",contact:isFinite(C.ch.Ve)?"wn":"er",pipe:isFinite(C.pipe.dCalc)?(isNum(S.pipe.din)&&isNum(S.pump.margin)?"ok":"wn"):"er"};
+ return `<ol class="steps">${WIZ.map((w,i)=>`<li><a href="#${w}"${w===cur?' aria-current="step"':""}><span class="dot ${st[w]}"></span>${i+1}. ${t(w)}</a></li>`).join("")}<li><a href="#results">→ ${t("results")}</a></li></ol>`;}
+function wizNav(cur){const i=WIZ.indexOf(cur);return `<div class="btns">${i>0?`<a class="btn ghost" href="#${WIZ[i-1]}">← Назад</a>`:""}<a class="btn" href="#${WIZ[i+1]||"results"}">${WIZ[i+1]?"Далее →":"Рассчитать →"}</a><button class="btn ghost" type="button" onclick="saveVersion()">Сохранить версию</button></div>`;}
+
+V.water=()=>`${stepsBar("water")}
+<h1>Исходная вода и расходы</h1><p class="lead">Показатели отмечаются как используемые в проекте. Пустое поле означает «нет данных», а не ноль.</p>
+<div class="grid2"><div class="stack">
+ <div class="panel"><h2>Расход исходной воды</h2>${seg("Q.mode",[["coag","Только коагуляция"],["uf","С установками УФ"]])}
+  ${S.Q.mode==="coag"?`<div class="fields" style="margin-top:12px">${num("Q.nom","Qном","м³/ч",{req:1,hint:"задаётся пользователем"})}${num("Q.min","Qmin","м³/ч",{ph:"= Qном",hint:"опционально"})}${num("Q.max","Qmax","м³/ч",{ph:"= Qном",hint:"опционально"})}</div>`:
+  `<div class="fields" style="margin-top:12px">${num("Q.nTrains","Рабочих установок УФ","шт.",{req:1})}${num("Q.qTrain","Подача исходной воды на одну установку","м³/ч",{req:1,hint:"подача на УФ, а не фильтрат; из расчёта УФ"})}</div>
+  <details${isNum(S.Q.minUser)||isNum(S.Q.maxUser)?" open":""}><summary>Изменить диапазон вручную</summary><div class="fields" style="margin-top:8px">${num("Q.minUser","Qmin","м³/ч",{ph:"1 установка"})}${num("Q.maxUser","Qmax","м³/ч",{ph:"= Qном"})}</div></details>`}
+  ${live("qchk")}</div>
+ <div class="panel"><h2>Анализ</h2><div class="fields">${txt("water.id","Идентификатор анализа")}${txt("water.date","Дата отбора",{ph:"ГГГГ-ММ-ДД"})}</div>
+  <div class="fields" style="margin-top:12px">${num("water.ph","pH","",{hint:"нужно для баланса и FeSO₄"})}${num("water.alk","Общая щёлочность","мг-экв/л",{hint:"= ммоль/л HCO₃⁻; мг/л CaCO₃ ÷ 50,04"})}${num("water.T","Температура","°C")}${num("water.turb","Мутность","NTU")}${num("water.color","Цветность","град.")}${num("water.po","Перманганатная окисляемость","мг O₂/л")}${num("water.tss","Взвешенные вещества","мг/л")}${num("water.al","Al общий","мг/л")}${num("water.fe","Fe общее","мг/л")}</div>
+  <details><summary>Дополнительно по каждому показателю</summary><p class="small muted">Для каждого значения: точка отбора, метод анализа, признак «ниже предела определения» и сам предел. В прототипе показано на примере:</p>
+   <div class="fields"><div class="f"><label for="xlod">Al общий: ниже предела определения</label><select id="xlod"><option>нет</option><option>да</option></select></div><div class="f"><label for="xlodv">Предел определения</label><div class="row"><input id="xlodv" class="num" placeholder="нет данных"><span class="u">мг/л</span></div></div><div class="f"><label for="xmet">Метод</label><input id="xmet" placeholder="напр., ИСП-ОЭС"></div></div></details>
+  ${S.r==="feso4"?`<div class="calc" style="margin-top:16px"><h3>Блок FeSO₄ (железо II) — появляется для этого реагента</h3><div class="fields">${num("water.o2","Растворённый кислород","мг/л")}${num("water.fe2","Fe²⁺","мг/л")}${sel("water.aer","Аэрация",[["no","нет"],["yes","есть"]])}${sel("water.oxid","Окислитель",[["none","не используется"],["NaOCl","гипохлорит натрия"],["KMnO4","перманганат калия"],["other","другой"]])}${num("water.oxTime","Доступное время окисления","с")}</div></div>`:""}
+ </div></div>
+ <div class="stack"><div class="panel"><h2>Импорт Excel / CSV</h2>
+  <ol class="small" style="padding-left:18px;margin:0 0 10px;display:grid;gap:4px"><li>Скачать шаблон (колонки: показатель, значение, единица, точка, дата, метод, &lt;ПО, ПО).</li><li>Загрузить файл.</li><li>Сопоставить колонки и единицы.</li><li>Проверить предпросмотр и ошибки по строкам.</li><li>Подтвердить: создаётся новый анализ.</li></ol>
+  <div class="tw"><table><thead><tr><th>Строка</th><th>Показатель</th><th class="n">Значение</th><th>Единица</th><th>Проверка</th></tr></thead><tbody>
+   <tr><td class="n">2</td><td>pH</td><td class="n">7,4</td><td>—</td><td><span class="pill s-balance">OK</span></td></tr>
+   <tr><td class="n">3</td><td>Щёлочность</td><td class="n">105</td><td>мг/л CaCO₃</td><td><span class="pill s-balance">→ 2,10 мг-экв/л</span></td></tr>
+   <tr><td class="n">4</td><td>Мутность</td><td class="n">шесть</td><td>NTU</td><td><span class="pill s-nodata">Не число</span></td></tr>
+   <tr><td class="n">5</td><td>Цветность</td><td class="n">35</td><td>°?</td><td><span class="pill s-clarify">Единица не распознана</span></td></tr></tbody></table></div>
+  <div class="msg info small">Существующий анализ не заменяется без явной кнопки «Заменить» и подтверждения.</div>
+  <div class="btns"><button class="btn ghost" type="button" disabled>Создать новый анализ (2 ошибки)</button></div><p class="footnote">Пример предпросмотра — демонстрационный.</p></div></div>
+</div>${wizNav("water")}`;
+LIVE.qchk=()=>{const q=C.Q;if(!C.qOk)return msgs([["bad","Нужно Qmin ≤ Qном ≤ Qmax, все значения больше нуля."]]);
+ return `<div class="calc" style="margin-top:14px"><h3>Расчётный диапазон</h3><dl class="kv"><dt>Qmin (${q.src.min})</dt><dd>${fmt(q.min)} м³/ч</dd><dt>Qном${S.Q.mode==="uf"?" ("+S.Q.nTrains+" уст.)":""}</dt><dd>${fmt(q.nom)} м³/ч</dd><dt>Qmax (${q.src.max})</dt><dd>${fmt(q.max)} м³/ч</dd><dt>Отношение Qmax/Qmin</dt><dd>1:${fmt(q.max/q.min,2)}</dd></dl>
+ <p class="footnote">${S.Q.mode==="uf"?"Насос-дозатор подбирается на равномерный впрыск при работе одной установки (Qmin). ":""}Камеры и труба по умолчанию подбираются по Qmax.</p></div>`;};
+
+V.coag=()=>{const r=S.r,R=REAG[r],p="pp."+r,P=S.pp[r];
+ const cbOpts=[["metal",R.me],...(R.me==="Al"?[["Al2O3","Al₂O₃"]]:[]),...(R.salt?[["salt",R.salt.f+" безводный"],["hydrate",R.salt.f+"·nH₂O (кристаллогидрат)"]]:[])];
+ return `${stepsBar("coag")}
+<h1>Коагулянт и паспорт продукта</h1><p class="lead">Концентрация без указания базы не принимается. Паспорт копируется в версию расчёта; изменение справочника не меняет сохранённые версии.</p>
+<div class="panel" style="margin-bottom:20px"><h2>Тип коагулянта</h2>${seg("r",Object.entries(REAG).map(([k,v])=>[k,`${v.short} <span class="small" style="opacity:.75">${v.ox}</span>`]))}
+ <p class="footnote">Степень окисления железа указана всегда: Fe₂(SO₄)₃ — железо(III), FeSO₄ — железо(II).${r==="alsulf"||r==="fe2so4"?" Для этого реагента в демо паспорт не заполнен — так выглядит незавершённый расчёт.":""}</p></div>
+<div class="grid2"><div class="panel"><h2>Паспорт: ${R.label}</h2>
+ <div class="fields">${txt(p+".name","Название",{req:1})}${txt(p+".maker","Производитель")}${txt(p+".grade","Марка")}${txt(p+".batch","Партия",{ph:"опционально"})}
+ ${sel(p+".form","Форма",[["liquid","жидкость"],["solid","твёрдый"]],{req:1})}${R.salt?sel(p+".hydr","Безводная соль / кристаллогидрат",[["anhydrous","безводная"],["hydrate","кристаллогидрат"]]):""}${R.salt&&P.hydr==="hydrate"?num(p+".hn","n в ·nH₂O","",{req:1}):""}</div>
+ <div class="calc" style="margin-top:14px"><h3>Концентрация товарного продукта</h3><div class="fields">${num(p+".c","Концентрация","% масс.",{req:1})}${sel(p+".cb","База выражения",cbOpts,{req:1})}${P.form==="liquid"?num(p+".rho","Плотность товарного раствора","кг/л",{req:1}):""}</div>${live("pass")}</div>
+ ${r==="pacl"?`<div class="calc" style="margin-top:14px"><h3>ПОХА</h3><div class="fields">${num(p+".basicity","Основность","%")}${txt(p+".bdef","Определение основности",{hint:"предложение Р11: [OH]/(3·[Al]), мольн. %"})}${num(p+".freeAcid","Свободная кислотность","мг-экв/г",{hint:"если известна"})}</div></div>`:""}
+ ${R.me==="Fe"?`<details${r==="feso4"?" open":""}><summary>Fe²⁺ / Fe³⁺ в продукте</summary><div class="fields">${num(p+".fe2","Доля Fe²⁺ от Fe общ.","%",{hint:"если указана в паспорте"})}</div></details>`:""}
+ </div>
+ <div class="panel"><h2>Рабочий раствор</h2><div class="fields">${txt(p+".wPrep","Способ приготовления")}${num(p+".wc","Концентрация рабочего раствора","г/л")}${sel(p+".wcb","База",[...cbOpts,["product","товарный продукт"]])}</div>
+ ${live("work")}
+ ${r==="feso4"?`<div class="msg bad"><b>FeSO₄ — железо(II).</b> Не эквивалентен FeCl₃ по содержанию Fe: для коагуляции требуется окисление Fe²⁺ → Fe³⁺. Состояние окисления задаётся на шаге «Режим дозирования».</div>`:""}
+ <div class="btns"><button class="btn ghost" type="button">Сохранить в мой справочник</button></div></div></div>${wizNav("coag")}`;};
+LIVE.pass=()=>{const P=S.pp[S.r];if(!C.pass.ok)return msgs([["bad","Укажите концентрацию и базу. Без базы значение не принимается."]]);
+ return `<dl class="kv" style="margin-top:10px"><dt>Массовая доля ${REAG[S.r].me} в товарном продукте</dt><dd>${fmt(C.pass.wProd*100,4)} %</dd>${S.r==="pacl"?`<dt>Массовая доля Al₂O₃</dt><dd>${fmt(C.pass.wProd/wMe("pacl","Al2O3")*100,4)} %</dd>`:""}</dl><p class="footnote">Пересчёт по стехиометрии (M-01). ${P.cb==="hydrate"?"Кристаллогидрат n = "+P.hn+".":""}</p>`;};
+LIVE.work=()=>{const P=S.pp[S.r];if(!isNum(P.wc))return msgs([["warn","Концентрация рабочего раствора не задана — подача насоса не рассчитывается."]]);
+ const cMe=P.wcb==="product"?P.wc*C.pass.wProd:P.wc*wMe(S.r,P.wcb,P.hn);return `<dl class="kv" style="margin-top:10px"><dt>То же по ${REAG[S.r].me}</dt><dd>${fmt(cMe)} г/л</dd></dl><p class="footnote">При расчёте подачи числитель и знаменатель приводятся к одной базе (M-05).</p>`;};
+
+V.dose=()=>{const r=S.r,R=REAG[r];const bopts=R.bases.map(b=>[b,b==="hydrate"?R.salt.f+"·nH₂O":basisName(r,b)]);
+ return `${stepsBar("dose")}
+<h1>Режим дозирования</h1><p class="lead">«Оптимальная доза» не выдаётся: подтверждённой модели нет. Предварительная оценка возможна только при зарегистрированной методике.</p>
+<div class="panel" style="margin-bottom:20px">${seg("mode",[["manual","Заданная доза"],["prelim","Предварительная оценка"]])}</div>
+<div class="grid2"><div class="stack">
+ ${S.mode==="manual"?`<div class="panel"><h2>Заданная доза — ${R.short}</h2><div class="fields">${sel("dose.basis","База дозы",bopts,{req:1})}${S.dose.basis==="hydrate"?num("dose.hn","n в ·nH₂O","",{req:1}):""}</div>
+  <div class="fields" style="margin-top:12px">${num("dose.min","Dmin","мг/л",{req:1})}${num("dose.nom","Dnom (расчётная)","мг/л",{req:1})}${num("dose.max","Dmax","мг/л",{req:1})}</div>
+  <p class="footnote">мг/л = г/м³. Внутренняя база — мг/л ${R.me}.</p></div>`:prelimPanel()}
+ ${r==="feso4"?fePanel():""}</div>
+ <div class="calc">${live("doseconv")}</div></div>${wizNav("dose")}`;};
+function prelimPanel(){const r=S.r,R=REAG[r];
+ if(r==="pacl") return `<div class="panel"><h2>Предварительная оценка — ${R.short}</h2>
+  <label class="small" style="display:flex;gap:6px;align-items:center;margin-bottom:10px"><input type="checkbox" id="stub" data-k="prelimStub" data-t="bool" data-full="1"${S.prelimStub?" checked":""}> Показать интерфейс с методикой-заглушкой</label>
+  ${S.prelimStub?`<div class="stub"><div class="eyebrow" style="color:var(--demo)">Заглушка интерфейса — не расчёт</div>
+   <dl class="kv"><dt>Методика</dt><dd>M-14 (не зарегистрирована)</dd><dt>Источник</dt><dd>отсутствует</dd><dt>Область применимости</dt><dd>не задана</dd><dt>Версия</dt><dd>—</dd><dt>Статус верификации</dt><dd>заглушка</dd></dl>
+   <p class="small" style="margin:10px 0 4px">Так будет показан диапазон после регистрации методики:</p>
+   <div style="font:500 22px var(--f-mono)">X₁ … X₂ <span class="basis">мг/л Al</span></div>
+   <p class="small muted" style="margin:6px 0 0">Значения не показываются, пока нет источника. Пользователь выбирает расчётную дозу внутри диапазона; выбор вне диапазона даёт предупреждение. Статус результата — «Предварительная оценка», не оптимум.</p></div>
+   <div class="msg info small">Для продолжения расчёта оборудования переключитесь на «Заданная доза» — введённые данные сохраняются.</div>`:msgs([["bad","<b>Недостаточно данных.</b> Для ПОХА не зарегистрирована методика предварительной оценки. Используйте режим «Заданная доза»."]])}</div>`;
+ return `<div class="panel"><h2>Предварительная оценка — ${R.short}</h2>${msgs([["bad",`<b>Недостаточно данных.</b> Для ${R.label} не зарегистрирована методика предварительной оценки. Зависимость для алюминиевых коагулянтов не переносится на соли железа. Используйте режим «Заданная доза».`]])}<button class="btn ghost" type="button" onclick="S.mode='manual';rerender()">Перейти к заданной дозе</button></div>`;}
+function fePanel(){const f=C.feso4;return `<div class="panel"><h2>Окисление Fe²⁺ — FeSO₄ (железо II)</h2>
+ <div class="fields">${sel("fe.status","Состояние окисления",[["auto","Определить по наличию данных"],["user","Задано пользователем"]])}${S.fe.status==="user"?txt("fe.userBasis","Основание (обязательно)",{req:1}):""}</div>
+ <div style="margin:12px 0">${pill(f.status==="user"?"user":f.status)} ${f.status==="clarify"?'<span class="small">окисление: требуется проверка</span>':""}</div>
+ ${f.miss.length?msgs([["warn","Не хватает: "+f.miss.join(", ")+"."]]):""}
+ <dl class="kv"><dt>Стехиом. потребность O₂ при Dmax</dt><dd>${fmt(f.o2need)} мг/л</dd><dt>Растворённый O₂ в воде</dt><dd>${fmt(S.water.o2)} мг/л</dd></dl>
+ <div class="msg bad small">Проверенная кинетическая модель не подключена. Состояние «окисление подтверждено принятой методикой» недоступно до регистрации методики (M-17).</div></div>`;}
+LIVE.doseconv=()=>{if(S.mode!=="manual")return `<h3>Пересчёт дозы</h3><p class="small muted">Пересчёт появится после выбора расчётной дозы.</p>`;
+ if(!C.doseOk||!C.pass.ok)return `<h3>Пересчёт дозы по базам</h3>${msgs([["bad","Нужны Dmin, Dnom, Dmax с базой и заполненный паспорт продукта."]])}`;
+ return `<h3>Пересчёт дозы по базам · ${pill("user")}</h3><div class="tw"><table><thead><tr><th>База</th><th class="n">Dmin</th><th class="n">Dnom</th><th class="n">Dmax</th></tr></thead><tbody>
+ ${C.doseTable.map(d=>`<tr><td><span class="basis">мг/л ${d.name}</span></td><td class="n">${fmt(d.min)}</td><td class="n">${fmt(d.nom)}</td><td class="n">${fmt(d.max)}</td></tr>`).join("")}</tbody></table></div>
+ <div class="formula">D_product = D_${REAG[S.r].me} / w_${REAG[S.r].me},product = ${fmt(C.dMe.nom)} / ${fmt(C.pass.wProd,4)}</div>
+ <h3 style="margin-top:14px">Теоретический расход щёлочности · стехиометрия</h3>
+ <dl class="kv"><dt>При Dnom</dt><dd>${fmt(C.alk.cons)} мг-экв/л</dd><dt>При Dmax</dt><dd>${fmt(C.alk.cmax)} мг-экв/л</dd><dt>Щёлочность исходной воды</dt><dd>${fmt(C.alk.water)} мг-экв/л</dd></dl>
+ <p class="footnote">Это баланс, а не прогноз pH. ${S.r==="pacl"?"Для ПОХА учтена основность: × (1 − B).":""}</p>${msgs(C.W.filter(w=>/щёлочн/.test(w[1])))}`;};
+
+V.ph=()=>`${stepsBar("ph")}
+<h1>Коррекция pH</h1><p class="lead">Расход щёлочности коагулянтом и доза на целевой pH — разные величины. Точный расход кислоты или щёлочи по разности pH не рассчитывается.</p>
+<div class="panel" style="margin-bottom:20px">${seg("ph.mode",[["none","Без коррекции"],["acid","Кислота"],["base","Щёлочь"],["unknown","Недостаточно данных"]])}</div>
+${S.ph.mode==="acid"||S.ph.mode==="base"?`<div class="grid2"><div class="panel"><h2>${S.ph.mode==="acid"?"Кислота":"Щёлочь"}</h2>
+ <div class="fields">${sel("ph.reag","Реагент",S.ph.mode==="acid"?[["HCl","HCl — соляная кислота"],["H2SO4","H₂SO₄ — серная кислота"]]:[["NaOH","NaOH — гидроксид натрия"]])}${txt("ph.point","Место ввода")}${num("ph.target","Целевой pH","")}</div>
+ <div class="calc" style="margin-top:14px"><h3>Товарный и рабочий раствор</h3><div class="fields">${num("ph.w","Массовая доля вещества","% масс.",{req:1})}${num("ph.rho","Плотность товарного раствора","кг/л",{req:1})}${num("ph.wc","Рабочий раствор по 100 % вещества","г/л")}</div></div>
+ <div class="calc" style="margin-top:14px"><h3>Способ определения дозы</h3>${seg("ph.how",[["manual","Заданная доза 100 %"],["curve","Титрационная зависимость"]])}
+  ${S.ph.how==="manual"?`<div class="fields" style="margin-top:10px">${num("ph.d100","Доза 100 % вещества","мг/л",{req:1})}</div>`:
+  `<p class="small muted" style="margin:10px 0 4px">Точки лабораторного титрования (ДЕМО): доза → pH. Интерполяция только внутри диапазона.</p><div class="tw"><table><thead><tr><th class="n">Доза, мг/л</th><th class="n">pH</th></tr></thead><tbody>${S.ph.curve.map((c,i)=>`<tr><td class="n"><input class="num" aria-label="доза ${i+1}" data-k="ph.curve.${i}.0" data-t="num" value="${String(c[0]).replace(".",",")}" style="width:90px;text-align:right;font-family:var(--f-mono)"></td><td class="n"><input class="num" aria-label="pH ${i+1}" data-k="ph.curve.${i}.1" data-t="num" value="${String(c[1]).replace(".",",")}" style="width:90px;text-align:right;font-family:var(--f-mono)"></td></tr>`).join("")}</tbody></table></div>`}</div></div>
+ <div class="calc">${live("phout")}</div></div>`:
+ `<div class="panel">${S.ph.mode==="none"?msgs([["info","Коррекция pH не предусмотрена. Насос P-102 и его точка ввода не включаются в P&ID."]]):msgs([["warn","Необходимость коррекции не определена. В результатах — статус «требуется уточнение»; на P&ID точка ввода показана как элемент, требующий уточнения."]])}</div>`}
+${wizNav("ph")}`;
+LIVE.phout=()=>{const p=C.ph;if(!p.ok)return `<h3>Расход реагента</h3>${msgs([["warn","Доза не определена. Нужна ручная доза 100 % вещества или целевой pH внутри титрационной кривой."]])}`;
+ return `<h3>Расход · ${p.src==="curve"?'<span class="pill s-clarify">По титрованию (интерполяция)</span>':pill("user")}</h3><p class="mono">D₁₀₀ = ${fmt(p.d)} мг/л ${S.ph.reag}</p>
+ <div class="tw"><table><thead><tr><th></th><th class="n">Q, м³/ч</th><th class="n">100 %, кг/ч</th><th class="n">Товарный, кг/ч</th><th class="n">Товарный, л/ч</th><th class="n">Рабочий, л/ч</th></tr></thead><tbody>
+ ${p.qs.map(q=>`<tr><td>${QL[q.k]}</td><td class="n">${fmt(q.q)}</td><td class="n">${fmt(q.M100)}</td><td class="n">${fmt(q.Mc)}</td><td class="n">${fmt(q.Lc)}</td><td class="n">${fmt(q.Lw)}</td></tr>`).join("")}</tbody></table></div>
+ <div class="formula">M₁₀₀ = D₁₀₀·Q/1000; Mком = M₁₀₀/w; qком = Mком/ρ; qраб = D₁₀₀·Q/C₁₀₀</div>`;};
+
+V.contact=()=>`${stepsBar("contact")}
+<h1>Смешение и контактные камеры</h1><p class="lead">Одна рабочая и одна резервная камера, каждая на полный расчётный расход (Р7). Объём не называется технологически достаточным, пока время не обосновано.</p>
+<div class="grid2"><div class="panel">
+ <div class="fields">${sel("mix.type","Тип быстрого смешения",[["Статический смеситель","Статический смеситель"],["Механический смеситель","Механический смеситель"],["Ввод в трубопровод","Ввод в трубопровод"]])}${txt("mix.seq","Последовательность ввода реагентов")}</div>
+ <div style="margin:16px 0 10px">${seg("mix.calc",[["t2v","Время → минимальный объём"],["v2t","Объём → время"]])}</div>
+ <div class="fields">${sel("mix.qBasis","Расход для подбора",[["max","Qmax (предложение)"],["nom","Qnom"],["min","Qmin"]],{hint:"Подбор выполняется по этому расходу"})}
+ ${S.mix.calc==="t2v"?num("mix.t","Контактное время","с",{req:1}):num("mix.V","Эффективный объём камеры","м³",{req:1})}</div>
+ ${S.mix.calc==="t2v"?`<div class="fields" style="margin-top:12px">${txt("mix.tBasis","Основание контактного времени",{hint:"источник, опыт объекта, пилотные испытания"})}</div>`:""}
+ <details${S.mix.useK?" open":""}><summary>Коэффициент использования объёма k</summary>
+  <label class="small" style="display:flex;gap:6px;align-items:center;margin:8px 0"><input type="checkbox" id="usek" data-k="mix.useK" data-t="bool" data-full="1"${S.mix.useK?" checked":""}> Применить k (по умолчанию не применяется)</label>
+  ${S.mix.useK?`<div class="fields">${num("mix.k","k","—",{req:1})}${txt("mix.kBasis","Основание k",{req:1})}</div>`:""}</details></div>
+ <div class="calc">${live("chout")}</div></div>${wizNav("contact")}`;
+LIVE.chout=()=>{const c=C.ch;if(!isFinite(c.Ve))return `<h3>Камеры</h3>${msgs([["bad","Задайте контактное время или объём."]])}`;
+ return `<h3>Камеры CT-101 (раб.) / CT-102 (рез.)</h3><dl class="kv"><dt>Расход подбора (${QL[S.mix.qBasis]})</dt><dd>${fmt(c.qd)} м³/ч</dd><dt>Vэфф, одна камера</dt><dd>${fmt(c.Ve)} м³</dd><dt>Vгеом, одна камера${c.k?" (k = "+fmt(c.k)+")":""}</dt><dd>${fmt(c.Vg)} м³</dd><dt>Vгеом, две камеры суммарно</dt><dd>${fmt(2*c.Vg)} м³</dd></dl>
+ <div class="formula">${S.mix.calc==="t2v"?"Vэфф = Q·t/3600":"t = 3600·Vэфф/Q"}${c.k?"; Vгеом = Vэфф/k":""}</div>
+ <h3 style="margin-top:14px">Номинальное время пребывания в рабочей камере</h3><div class="tw"><table><thead><tr><th></th><th class="n">Q, м³/ч</th><th class="n">t, с</th></tr></thead><tbody>${c.times.map(x=>`<tr><td>${QL[x.k]}</td><td class="n">${fmt(x.q)}</td><td class="n">${fmt(x.t)}</td></tr>`).join("")}</tbody></table></div>
+ ${msgs(C.W.filter(w=>/Контактное время|k /.test(w[1])||/Коэффициент/.test(w[1])))}
+ <p class="footnote">ДЕМО: t = 60 с введено для демонстрации; это не рекомендация.</p>`;};
+
+V.pipe=()=>`${stepsBar("pipe")}
+<h1>Трубопровод и насосы-дозаторы</h1><p class="lead">Труба: расчётный внутренний диаметр и скорости. Насосы: требуемые характеристики, а не выбор модели.</p>
+<div class="grid2"><div class="stack"><div class="panel"><h2>Трубопровод узла</h2>
+ <div class="fields">${sel("pipe.qBasis","Расчётный расход",[["max","Qmax"],["nom","Qnom"],["min","Qmin"]])}${num("pipe.v","Расчётная скорость","м/с",{req:1})}${txt("pipe.vBasis","Основание скорости")}${sel("pipe.mat","Материал",[["ПВХ-U","ПВХ-U"],["ПЭ100","ПЭ100"],["Нерж. сталь","Нержавеющая сталь"]])}</div>
+ <div class="fields" style="margin-top:12px">${num("pipe.din","Факт. внутренний диаметр выбранного типоразмера","мм",{hint:"из каталога трубы; DN и Dнар здесь не вводятся"})}</div></div>
+ <div class="panel"><h2>Насосы-дозаторы</h2><div class="fields">${num("pump.p","Давление в точке ввода","бар изб.",{req:1})}${num("pump.dp","Доп. потери давления","бар",{hint:"если заданы"})}${num("pump.margin","Проектный запас по подаче","%",{hint:"без значения по умолчанию (Р10)"})}${txt("pump.marginBasis","Основание запаса")}${sel("pump.reserve","Резервирование",[["1 раб. + 1 рез.","1 раб. + 1 рез. (предложение Р9)"],["без резерва","без резерва"],["складской резерв","складской резерв"]])}</div></div></div>
+ <div class="calc">${live("pipeout")}</div></div>${wizNav("pipe")}`;
+LIVE.pipeout=()=>{const p=C.pipe;return `<h3>Труба</h3><dl class="kv"><dt>Расход (${QL[S.pipe.qBasis]})</dt><dd>${fmt(p.qp)} м³/ч</dd><dt>Расчётный внутренний диаметр</dt><dd>${fmt(p.dCalc)} мм</dd><dt>Выбранный типоразмер, dвн</dt><dd>${isNum(S.pipe.din)?fmt(S.pipe.din)+" мм":"требует уточнения"}</dd></dl>
+ <div class="formula">d = √(4·(Q/3600)/(π·v))</div>
+ ${isNum(S.pipe.din)?`<div class="tw"><table><thead><tr><th></th><th class="n">Q, м³/ч</th><th class="n">v, м/с</th></tr></thead><tbody>${p.vs.map(x=>`<tr><td>${QL[x.k]}</td><td class="n">${fmt(x.q)}</td><td class="n">${fmt(x.v)}</td></tr>`).join("")}</tbody></table></div>`:msgs([["warn","Введите фактический dвн по каталогу, чтобы получить скорости при Qmin/Qnom/Qmax."]])}
+ <h3 style="margin-top:16px">Насосы — требуемые характеристики</h3><div class="tw"><table><thead><tr><th>Позиция</th><th class="n">qmin, л/ч</th><th class="n">qnom, л/ч</th><th class="n">qmax, л/ч</th><th class="n">Верх диап., л/ч</th><th class="n">Кратн.</th><th class="n">P, бар</th></tr></thead><tbody>
+ ${C.pumps.map(u=>`<tr><td><span class="tag">${u.tag}</span><div class="small muted">${u.name}</div></td><td class="n">${fmt(u.qmin)}</td><td class="n">${fmt(u.qnom)}</td><td class="n">${fmt(u.qmax)}</td><td class="n">${fmt(u.top)}</td><td class="n">${isFinite(u.turn)?"1:"+fmt(u.turn,2):"—"}</td><td class="n">≥ ${fmt(u.p)}</td></tr>`).join("")}</tbody></table></div>
+ <p class="footnote">qmin = q(Dmin, Qmin), qmax = q(Dmax, Qmax), по рабочему раствору. ${S.Q.mode==="uf"?"Qmin — работа одной установки УФ: насос должен давать равномерный впрыск на этой подаче.":""} Давление = точка ввода + заданные потери; потери в линии не рассчитываются.</p>${msgs(C.W.filter(w=>/запас|типоразмер|рабочего раствора/.test(w[1])))}`;};
+
+V.results=()=>{const R=REAG[S.r],P=S.pp[S.r];return `
+<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:16px"><div><div class="eyebrow">Расчёт RC-0001 · черновик · методики M-01…M-13 v1.0 · ДЕМО</div><h1>Результаты расчёта</h1></div><div>${pill(C.status)}</div></div>
+<div class="grid2" style="margin-bottom:20px">
+ <div class="panel"><h2>Коагулянт: ${R.label}</h2><p class="small muted" style="margin:0 0 8px">${esc(P.name)} · ${P.c?fmt(P.c)+" % по "+basisName(S.r,P.cb,P.hn):"концентрация не задана"} · ${C.dStatus==="user"?"доза задана пользователем":"доза не определена"}</p>
+  <div class="tw"><table><thead><tr><th></th><th class="n">Qmin</th><th class="n">Qnom</th><th class="n">Qmax</th></tr></thead><tbody>
+  <tr><td>Q, м³/ч</td>${C.flows.map(f=>`<td class="n">${fmt(f.q)}</td>`).join("")}</tr>
+  <tr><td>Доза (Dnom) <span class="basis">мг/л ${R.me}</span></td>${C.flows.map(()=>`<td class="n">${fmt(C.dMe.nom)}</td>`).join("")}</tr>
+  ${S.r==="pacl"?`<tr><td>Доза <span class="basis">мг/л Al₂O₃</span></td>${C.flows.map(()=>`<td class="n">${fmt(C.dMe.nom/wMe("pacl","Al2O3"))}</td>`).join("")}</tr>`:""}
+  <tr><td>Доза <span class="basis">мг/л товарного</span></td>${C.flows.map(f=>`<td class="n">${fmt(f.Dp)}</td>`).join("")}</tr>
+  <tr><td>Расход ${R.me} (100 %), кг/ч</td>${C.flows.map(f=>`<td class="n">${fmt(f.Mme)}</td>`).join("")}</tr>
+  ${S.r==="pacl"?`<tr><td>Расход Al₂O₃, кг/ч</td>${C.flows.map(f=>`<td class="n">${fmt(f.Mme/wMe("pacl","Al2O3"))}</td>`).join("")}</tr>`:`<tr><td>Расход ${R.salt.f} безв., кг/ч</td>${C.flows.map(f=>`<td class="n">${fmt(f.Mme/wMe(S.r,"salt"))}</td>`).join("")}</tr>`}
+  <tr><td>Товарный продукт, кг/ч</td>${C.flows.map(f=>`<td class="n">${fmt(f.Mp)}</td>`).join("")}</tr>
+  <tr><td>Товарный продукт, л/ч</td>${C.flows.map(f=>`<td class="n">${P.form==="solid"?"тв.":fmt(f.Lp)}</td>`).join("")}</tr>
+  <tr><td>Рабочий раствор, л/ч</td>${C.flows.map(f=>`<td class="n">${fmt(f.Lw)}</td>`).join("")}</tr></tbody></table></div>
+  <p class="footnote">Происхождение: ${pill("balance")} при дозе ${pill(C.dStatus)}</p></div>
+ <div class="stack"><div class="panel"><h2>Оборудование</h2><dl class="kv">
+  <dt>CT-101/102: Vэфф одной камеры</dt><dd>${fmt(C.ch.Ve)} м³</dd><dt>CT-101/102: Vгеом суммарно</dt><dd>${fmt(2*C.ch.Vg)} м³</dd>
+  <dt>Трубопровод: dвн расчётный</dt><dd>${fmt(C.pipe.dCalc)} мм</dd><dt>Трубопровод: dвн выбранный</dt><dd>${isNum(S.pipe.din)?fmt(S.pipe.din)+" мм":"требует уточнения"}</dd>
+  ${C.pumps.map(u=>`<dt>${u.tag}: подача</dt><dd>${fmt(u.qmin)}–${fmt(u.qmax)} л/ч</dd>`).join("")}
+  <dt>Коррекция pH</dt><dd>${{none:"нет",acid:"кислота",base:"щёлочь",unknown:"не определена"}[S.ph.mode]}</dd></dl></div>
+ <div class="panel"><h2>Требования к качеству</h2>${S.req.map(q=>`<div class="small" style="display:flex;justify-content:space-between;gap:8px;padding:3px 0"><span>${q.p} ≤ ${fmt(q.v)} ${q.u} · ${q.pt}</span><span class="pill s-clarify">не подтверждено</span></div>`).join("")}<div class="msg warn small">Требование задано. Достижение расчётом не подтверждено; требуется проверка.</div></div></div></div>
+<div class="grid2"><div class="panel"><h2>Предупреждения (${C.W.length})</h2>${msgs(C.W)||'<p class="muted small">Нет</p>'}</div>
+ <div class="panel"><h2>Допущения</h2><ul class="small" style="margin:0;padding-left:18px;display:grid;gap:4px">${C.ASM.map(a=>`<li>${a}</li>`).join("")}<li>Демо-значения: t = 60 с, v = 1,5 м/с — введены для примера, без основания.</li></ul></div></div>
+<div class="btns"><button class="btn" type="button" onclick="saveVersion()">Сохранить версию</button><button class="btn ghost" type="button" onclick="saveVersion(true)">Сохранить как вариант для сравнения</button><a class="btn ghost" href="#tkp">ТКП</a><a class="btn ghost" href="#pid">P&ID</a><a class="btn ghost" href="#note">Записка</a></div>
+<p class="footnote">Сохранённая версия — неизменяемый снимок: входы, паспорт продукта, версия методик, допущения, предупреждения, результаты, статус.</p>`;};
+
+function snap(){return {n:S.versions.length+1,date:new Date().toISOString().slice(0,10),st:JSON.parse(JSON.stringify({...S,versions:[],cmp:[]})),c:compute(S)};}
+function saveVersion(toCmp){const v=snap();S.versions.push(v);S.selVersion=v.n;if(toCmp&&!S.cmp.includes(v.n))S.cmp.push(v.n);toast("Версия "+v.n+" сохранена");rerender();}
+
+V.compare=()=>{const vs=S.versions.filter(v=>S.cmp.includes(v.n));return `
+<h1>Сравнение вариантов</h1><p class="lead">Сравниваются расходы и оборудование при одинаковых исходных данных. Эффективность очистки не сравнивается.</p>
+<div class="panel" style="margin-bottom:16px"><h3>Версии в сравнении</h3><div style="display:flex;flex-wrap:wrap;gap:12px">${S.versions.map(v=>`<label class="small" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="cmp${v.n}" ${S.cmp.includes(v.n)?"checked":""} onchange="toggleCmp(${v.n})"> в.${v.n} · ${REAG[v.st.r].short} · ${v.st.mode==="manual"?fmt(v.st.dose.nom)+" мг/л "+basisName(v.st.r,v.st.dose.basis,v.st.dose.hn):"оценка"}</label>`).join("")}</div>
+ ${sameInputs(vs)?"":msgs([["warn","Исходные данные выбранных версий различаются — сравнение некорректно."]])}</div>
+${vs.length<2?msgs([["info","Выберите не менее двух версий."]]):`<div class="panel tw"><table><thead><tr><th>Показатель</th>${vs.map(v=>`<th class="n">в.${v.n} · ${REAG[v.st.r].short}</th>`).join("")}</tr></thead><tbody>
+ ${[["Степень окисления",v=>REAG[v.st.r].ox],["Доза Dnom, мг/л металла",v=>fmt(v.c.dMe.nom)+" "+REAG[v.st.r].me],["Доза товарного продукта, мг/л",v=>fmt(v.c.flows[1].Dp)],["Товарный продукт при Qnom, кг/ч",v=>fmt(v.c.flows[1].Mp)],["Товарный продукт при Qnom, л/ч",v=>v.st.pp[v.st.r].form==="solid"?"тв.":fmt(v.c.flows[1].Lp)],["Рабочий раствор при Qnom, л/ч",v=>fmt(v.c.flows[1].Lw)],["Расход щёлочности при Dnom, мг-экв/л",v=>fmt(v.c.alk.cons)],["Насос коагулянта, л/ч",v=>fmt(v.c.pumps[0].qmin)+"–"+fmt(v.c.pumps[0].qmax)],["Vэфф камеры, м³",v=>fmt(v.c.ch.Ve)],["Статус",v=>pill(v.c.status)]].map(([l,f])=>`<tr><td>${l}</td>${vs.map(v=>`<td class="n">${f(v)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`}
+<p class="footnote">Вывод «реагент лучше очищает» по этой таблице не делается.</p>
+<div class="btns"><button class="btn ghost" type="button" onclick="toast('Вариант отмечен как выбранный (имитация)')">Отметить выбранный вариант</button></div>`;};
+function sameInputs(vs){if(vs.length<2)return true;const k=v=>JSON.stringify([v.c.Q,v.st.water]);return vs.every(v=>k(v)===k(vs[0]));}
+function toggleCmp(n){const i=S.cmp.indexOf(n);if(i>=0)S.cmp.splice(i,1);else S.cmp.push(n);rerender();}
+
+function cur(){return S.versions.find(v=>v.n===S.selVersion)||null;}
+function versionPick(){return `<div class="panel" style="margin-bottom:16px;display:flex;flex-wrap:wrap;gap:12px;align-items:center"><span class="small">Источник чисел — сохранённая версия:</span><select id="vpick" onchange="S.selVersion=+this.value;rerender()">${S.versions.map(v=>`<option value="${v.n}"${v.n===S.selVersion?" selected":""}>в.${v.n} · ${REAG[v.st.r].short} · ${v.date}</option>`).join("")}</select><span class="demo-flag">ДЕМО-ДАННЫЕ</span></div>`;}
+
+V.tkp=()=>{const v=cur();if(!v)return `<h1>Визуализация для ТКП</h1>${msgs([["info","Сохраните версию расчёта — ТКП строится только из сохранённой версии."]])}`;
+ const st=v.st,c=v.c,R=REAG[st.r];return `${versionPick()}
+<div class="tkp"><div class="tkp-head"><div><div class="eyebrow">Технико-коммерческое предложение · приложение</div><h1 style="font-size:24px">${esc(st.project.name)}</h1><div class="small muted">${esc(st.project.customer)} · расчёт RC-0001 в.${v.n} от ${v.date}</div></div><div style="text-align:right">${pill(c.status)}<div class="small muted" style="margin-top:6px">Предварительный расчёт</div></div></div>
+ <div class="figs"><div class="fig"><div class="v">${fmt(c.Q.nom)}</div><div class="l">Qnom, м³/ч (${fmt(c.Q.min)}–${fmt(c.Q.max)})</div></div><div class="fig"><div class="v">${R.short}</div><div class="l">Коагулянт · ${R.ox}</div></div><div class="fig"><div class="v">${fmt(c.dMe.nom)}</div><div class="l">Расчётная доза, мг/л ${R.me} (${c.dStatus==="user"?"задана заказчиком":"оценка"})</div></div><div class="fig"><div class="v">${fmt(c.flows[1].Mp)}</div><div class="l">Товарный продукт при Qnom, кг/ч</div></div></div>
+ <div class="svgbox small">${tkpSvg(st,c)}</div>
+ <div class="grid2" style="margin-top:18px"><div><h3>Исходные данные (анализ ${esc(st.water.id)})</h3><dl class="kv"><dt>pH</dt><dd>${fmt(st.water.ph)}</dd><dt>Щёлочность, мг-экв/л</dt><dd>${fmt(st.water.alk)}</dd><dt>Температура, °C</dt><dd>${fmt(st.water.T)}</dd><dt>Мутность, NTU</dt><dd>${fmt(st.water.turb)}</dd><dt>Цветность, град.</dt><dd>${fmt(st.water.color)}</dd><dt>ПО, мг O₂/л</dt><dd>${fmt(st.water.po)}</dd></dl></div>
+  <div><h3>Оборудование</h3><dl class="kv"><dt>Контактные камеры</dt><dd>2 × ${fmt(c.ch.Vg)} м³ (1 раб. + 1 рез.)</dd><dt>Трубопровод, dвн</dt><dd>${isNum(st.pipe.din)?fmt(st.pipe.din):"≈ "+fmt(c.pipe.dCalc)+" (уточн.)"} мм</dd>${c.pumps.map(u=>`<dt>${u.name}</dt><dd>${fmt(u.qmin)}–${fmt(u.qmax)} л/ч, ≥ ${fmt(u.p)} бар</dd>`).join("")}</dl></div></div>
+ <h3 style="margin-top:18px">Основные допущения</h3><ul class="small" style="margin:0;padding-left:18px">${c.ASM.slice(0,4).map(a=>`<li>${a}</li>`).join("")}</ul>
+ <p class="footnote">Целевые показатели качества (${st.req.map(q=>q.p).join(", ")}) заданы как требования; их достижение расчётом не подтверждено и требует проверки. Схема упрощённая и не является P&ID.</p></div>`;};
+function tkpSvg(st,c){const box=(x,w,t1,t2,acc)=>`<rect x="${x}" y="40" width="${w}" height="70" rx="6" fill="${acc?"var(--accent-soft)":"var(--sheet)"}" stroke="${acc?"var(--accent)":"var(--ink2)"}" stroke-width="${acc?2:1.2}"/><text x="${x+w/2}" y="70" text-anchor="middle" font-size="13" font-weight="600" fill="var(--ink)">${t1}</text><text x="${x+w/2}" y="90" text-anchor="middle" font-size="11.5" fill="var(--ink2)">${t2}</text>`;
+ const ar=(x1,x2)=>`<line x1="${x1}" y1="75" x2="${x2-4}" y2="75" stroke="var(--ink2)" stroke-width="1.5" marker-end="url(#ta)"/>`;
+ const phTxt={none:"не требуется",acid:st.ph.reag,base:st.ph.reag,unknown:"не определена"}[st.ph.mode];
+ return `<svg viewBox="0 0 760 140" role="img" aria-label="Упрощённая схема узла"><defs><marker id="ta" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--ink2)"/></marker></defs>
+ ${box(6,104,"Исходная вода",fmt(c.Q.min)+"–"+fmt(c.Q.max)+" м³/ч")}${ar(110,130)}${box(130,108,"Предфильтр","и насос P-100")}${ar(238,258)}${box(258,108,"Коррекция pH",phTxt,st.ph.mode!=="none")}${ar(366,386)}${box(386,108,REAG[st.r].short,fmt(c.dMe.nom)+" мг/л "+REAG[st.r].me,true)}${ar(494,514)}${box(514,132,"Смешение, контакт","2 × "+fmt(c.ch.Vg)+" м³",true)}${ar(646,666)}${box(666,88,"УФ","граница узла")}</svg>`;}
+
+/* ===== P&ID из модели оборудования ===== */
+function equipModel(st,c){const E=[];const add=(tag,name,status,params)=>E.push({tag,name,status,params});
+ add("F-100","Предфильтр исходной воды (до ввода реагентов)","conditional","тонкость фильтрации — по требованиям УФ");
+ add("P-100","Насос подачи исходной воды (до ввода реагентов)","conditional","Q "+fmt(c.Q.min)+"–"+fmt(c.Q.max)+" м³/ч; напор — по расчёту УФ");
+ add("FT-101","Расходомер исходной воды","conditional","сигнал для пропорционального дозирования; состав автоматики — на согласовании");
+ if(st.ph.mode==="acid"||st.ph.mode==="base") { add("T-102","Ёмкость рабочего раствора "+st.ph.reag,"conditional","объём не рассчитывается в v1"); add("P-102A/B","Насос-дозатор "+st.ph.reag,c.ph.ok?"calculated":"clarify",c.ph.ok?`${fmt(c.pumps[1]?.qmin)}–${fmt(c.pumps[1]?.qmax)} л/ч, ≥ ${fmt(c.pumps[0].p)} бар`:"доза не определена"); }
+ if(st.ph.mode==="unknown") add("IP-1","Точка ввода pH-реагента","clarify","необходимость не определена");
+ add("T-101","Ёмкость рабочего раствора коагулянта","conditional","объём не рассчитывается в v1");
+ add("P-101A/B","Насос-дозатор коагулянта ("+REAG[st.r].short+")",isFinite(c.pumps[0].qmax)?"calculated":"clarify",`${fmt(c.pumps[0].qmin)}–${fmt(c.pumps[0].qmax)} л/ч, ≥ ${fmt(c.pumps[0].p)} бар`);
+ add("MX-101",st.mix.type,"conditional","тип выбран пользователем; не рассчитывается");
+ add("AT-101","pH-метр после смешения","conditional","контроль; автоматика на согласовании");
+ add("CT-101","Контактная камера рабочая",isFinite(c.ch.Ve)?"calculated":"clarify",`Vгеом ${fmt(c.ch.Vg)} м³`);
+ add("CT-102","Контактная камера резервная",isFinite(c.ch.Ve)?"calculated":"clarify",`Vгеом ${fmt(c.ch.Vg)} м³`);
+ add("XV-101…104","Отсечная арматура переключения камер","conditional","состав арматуры — на согласовании");
+ add("L-101","Трубопровод узла",isNum(st.pipe.din)?"calculated":"clarify",isNum(st.pipe.din)?`dвн ${fmt(st.pipe.din)} мм, ${st.pipe.mat}`:`dвн расч. ${fmt(c.pipe.dCalc)} мм, типоразмер не выбран`);
+ add("SP-1…3","Пробоотборные точки: исходная вода, перед УФ, (ультрафильтрат — вне узла)","conditional","");
+ return E;}
+const EST={calculated:["Рассчитано","var(--accent)",""],conditional:["Условно показано","var(--ink2)","5 4"],clarify:["Требует уточнения","var(--warn)","2 3"]};
+V.pid=()=>{const v=cur();if(!v)return `<h1>P&ID</h1>${msgs([["info","Сохраните версию расчёта — схема формируется из сохранённой модели оборудования."]])}`;
+ const st=v.st,c=v.c,E=equipModel(st,c);return `${versionPick()}
+<div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;align-items:flex-end;margin-bottom:12px"><div><h1>Принципиальная P&ID узла</h1><p class="lead" style="margin:0">Сформирована из модели оборудования версии ${v.n}. Позиции совпадают с запиской и спецификацией.</p></div>
+ <div style="display:flex;gap:14px;flex-wrap:wrap">${Object.entries(EST).map(([k,[l,col,d]])=>`<span class="small" style="display:flex;gap:6px;align-items:center"><svg width="30" height="10" aria-hidden="true"><line x1="0" y1="5" x2="30" y2="5" stroke="${col}" stroke-width="2.5" stroke-dasharray="${d}"/></svg>${l}</span>`).join("")}</div></div>
+<div class="svgbox">${pidSvg(st,c,E)}</div>
+<div class="msg warn small">Принципиальная схема. Не является рабочей документацией. Обозначения — по мотивам ISO 10628 / ISA 5.1 (на согласовании Р13).</div>`;};
+function pidSvg(st,c,E){const s=Object.fromEntries(E.map(e=>[e.tag,EST[e.status]]));const hasPH=st.ph.mode==="acid"||st.ph.mode==="base", unkPH=st.ph.mode==="unknown";
+ const ln=(d,stt,w=2.5)=>`<path d="${d}" fill="none" stroke="${stt[1]}" stroke-width="${w}" stroke-dasharray="${stt[2]}" marker-end="url(#pa)"/>`;
+ const inst=(x,y,tag,stt)=>`<g><line x1="${x}" y1="${y+16}" x2="${x}" y2="250" stroke="${stt[1]}" stroke-dasharray="3 3"/><circle cx="${x}" cy="${y}" r="17" fill="var(--sheet)" stroke="${stt[1]}" stroke-width="1.5" stroke-dasharray="${stt[2]}"/><text x="${x}" y="${y+4}" text-anchor="middle" font-size="10.5" font-family="IBM Plex Mono,monospace" fill="var(--ink)">${tag}</text></g>`;
+ const pump=(x,y,tag,stt,label)=>`<g><circle cx="${x}" cy="${y}" r="16" fill="var(--sheet)" stroke="${stt[1]}" stroke-width="2" stroke-dasharray="${stt[2]}"/><path d="M${x-8} ${y+8} L${x} ${y-12} L${x+8} ${y+8}" fill="none" stroke="${stt[1]}" stroke-width="1.5"/><text x="${x+24}" y="${y-4}" font-size="11" font-family="IBM Plex Mono,monospace" fill="var(--ink)">${tag}</text><text x="${x+24}" y="${y+10}" font-size="10.5" fill="var(--ink2)">${label}</text></g>`;
+ const tank=(x,y,tag,stt,label)=>`<g><rect x="${x-26}" y="${y-30}" width="52" height="60" rx="4" fill="var(--sheet)" stroke="${stt[1]}" stroke-width="1.5" stroke-dasharray="${stt[2]}"/><text x="${x}" y="${y-36}" text-anchor="middle" font-size="11" font-family="IBM Plex Mono,monospace" fill="var(--ink)">${tag}</text><text x="${x}" y="${y+46}" text-anchor="middle" font-size="10.5" fill="var(--ink2)">${label}</text></g>`;
+ const valve=(x,y,tag)=>`<g><path d="M${x-8} ${y-6} L${x+8} ${y+6} L${x+8} ${y-6} L${x-8} ${y+6}Z" fill="var(--sheet)" stroke="var(--ink2)" stroke-width="1.3"/><text x="${x}" y="${y-10}" text-anchor="middle" font-size="9.5" font-family="IBM Plex Mono,monospace" fill="var(--ink2)">${tag}</text></g>`;
+ const sp=(x,y,tag)=>`<g><line x1="${x}" y1="250" x2="${x}" y2="${y}" stroke="var(--ink2)"/><path d="M${x-6} ${y} L${x+6} ${y} L${x} ${y+9}Z" fill="var(--ink2)"/><text x="${x}" y="${y+22}" text-anchor="middle" font-size="10" font-family="IBM Plex Mono,monospace" fill="var(--ink2)">${tag}</text></g>`;
+ const L=s["L-101"];const ct=s["CT-101"];
+ return `<svg viewBox="0 0 1100 440" role="img" aria-label="Принципиальная P&ID узла коагуляции"><defs><marker id="pa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--ink2)"/></marker></defs>
+ <text x="20" y="214" font-size="11.5" fill="var(--ink)">Исходная вода</text><text x="20" y="228" font-size="10.5" fill="var(--ink2)">${fmt(c.Q.min)}–${fmt(c.Q.max)} м³/ч</text>
+ ${ln("M20 250 H600",L)}
+ ${sp(40,300,"SP-1")}
+ <g><rect x="62" y="232" width="30" height="36" rx="4" fill="var(--sheet)" stroke="${s["F-100"][1]}" stroke-width="1.5" stroke-dasharray="${s["F-100"][2]}"/><path d="M66 242 h22 M66 250 h22 M66 258 h22" stroke="var(--ink2)" stroke-width=".8" stroke-dasharray="2 2"/><text x="77" y="290" text-anchor="middle" font-size="11" font-family="IBM Plex Mono,monospace" fill="var(--ink)">F-100</text></g>
+ <g><circle cx="128" cy="250" r="15" fill="var(--sheet)" stroke="${s["P-100"][1]}" stroke-width="2" stroke-dasharray="${s["P-100"][2]}"/><path d="M121 241 L139 250 L121 259z" fill="var(--ink2)"/><text x="128" y="290" text-anchor="middle" font-size="11" font-family="IBM Plex Mono,monospace" fill="var(--ink)">P-100</text></g>
+ ${inst(185,190,"FT 101",s["FT-101"])}
+ ${hasPH?tank(250,70,"T-102",s["T-102"],st.ph.reag)+pump(250,150,"P-102A/B",s["P-102A/B"],c.ph.ok?fmt(c.pumps[1]?.qmin)+"–"+fmt(c.pumps[1]?.qmax)+" л/ч":"уточнить")+`<path d="M250 100 V134 M250 166 V245" stroke="${s["P-102A/B"][1]}" stroke-width="1.5" stroke-dasharray="${s["P-102A/B"][2]}" fill="none" marker-end="url(#pa)"/>`:""}
+ ${unkPH?`<g><circle cx="250" cy="250" r="6" fill="var(--warn)"/><text x="250" y="232" text-anchor="middle" font-size="10.5" fill="var(--warn)">IP-1: pH-реагент?</text></g>`:""}
+ ${tank(370,70,"T-101",s["T-101"],REAG[st.r].short)}${pump(370,150,"P-101A/B",s["P-101A/B"],fmt(c.pumps[0].qmin)+"–"+fmt(c.pumps[0].qmax)+" л/ч")}<path d="M370 100 V134 M370 166 V245" stroke="${s["P-101A/B"][1]}" stroke-width="1.5" stroke-dasharray="${s["P-101A/B"][2]}" fill="none" marker-end="url(#pa)"/>
+ <g><rect x="440" y="236" width="70" height="28" rx="3" fill="var(--sheet)" stroke="${s["MX-101"][1]}" stroke-width="1.5" stroke-dasharray="${s["MX-101"][2]}"/><path d="M448 250 l8 -8 l8 16 l8 -16 l8 16 l8 -16 l8 8" fill="none" stroke="var(--ink2)"/><text x="475" y="284" text-anchor="middle" font-size="11" font-family="IBM Plex Mono,monospace" fill="var(--ink)">MX-101</text></g>
+ ${inst(560,190,"AT 101",s["AT-101"])}
+ <path d="M600 250 V160 H660 M600 250 V340 H660" fill="none" stroke="${L[1]}" stroke-width="2.5" stroke-dasharray="${L[2]}"/>
+ ${valve(635,160,"XV-101")}${valve(635,340,"XV-103")}
+ <g><rect x="660" y="120" width="150" height="80" rx="4" fill="var(--accent-soft)" stroke="${ct[1]}" stroke-width="2" stroke-dasharray="${ct[2]}"/><text x="735" y="152" text-anchor="middle" font-size="12" font-family="IBM Plex Mono,monospace" font-weight="500" fill="var(--ink)">CT-101 раб.</text><text x="735" y="172" text-anchor="middle" font-size="11" fill="var(--ink2)">Vгеом ${fmt(c.ch.Vg)} м³</text></g>
+ <g><rect x="660" y="300" width="150" height="80" rx="4" fill="var(--sheet)" stroke="${ct[1]}" stroke-width="2" stroke-dasharray="${ct[2]||"7 4"}"/><text x="735" y="332" text-anchor="middle" font-size="12" font-family="IBM Plex Mono,monospace" font-weight="500" fill="var(--ink)">CT-102 рез.</text><text x="735" y="352" text-anchor="middle" font-size="11" fill="var(--ink2)">Vгеом ${fmt(c.ch.Vg)} м³</text></g>
+ <path d="M810 160 H870 V250 M810 340 H870 V250" fill="none" stroke="${L[1]}" stroke-width="2.5" stroke-dasharray="${L[2]}"/>
+ ${valve(840,160,"XV-102")}${valve(840,340,"XV-104")}
+ ${ln("M870 250 H1010",L)}${sp(940,300,"SP-2")}
+ <rect x="1010" y="220" width="80" height="60" rx="4" fill="none" stroke="var(--ink)" stroke-width="1.5"/><text x="1050" y="246" text-anchor="middle" font-size="12" font-weight="600" fill="var(--ink)">Вход УФ</text><text x="1050" y="264" text-anchor="middle" font-size="10" fill="var(--ink2)">граница узла</text>
+ <text x="660" y="104" font-size="10.5" fill="var(--ink2)">L-101: ${isNum(st.pipe.din)?"dвн "+fmt(st.pipe.din)+" мм":"dвн расч. "+fmt(c.pipe.dCalc)+" мм — уточнить"}</text>
+ <text x="20" y="425" font-size="10.5" fill="var(--ink2)">Принципиальная схема, сформирована автоматически из версии расчёта. Не является рабочей документацией.</text></svg>`;}
+
+V.note=()=>{const v=cur();if(!v)return `<h1>Пояснительная записка</h1>${msgs([["info","Сохраните версию расчёта."]])}`;
+ const st=v.st,c=v.c,R=REAG[st.r],P=st.pp[st.r],E=equipModel(st,c);
+ return `${versionPick()}<div class="grid2"><article class="panel note-doc"><div class="eyebrow">Расчёт RC-0001 в.${v.n} · ${v.date} · ${pill(c.status)}</div><h1 style="font-size:22px">Пояснительная записка: узел непосредственной коагуляции перед УФ</h1>
+ <h3>1. Назначение</h3><p>Предварительный расчёт узла коагуляции перед ультрафильтрацией для объекта «${esc(st.project.customer)}». Документ не является рабочим проектом.</p>
+ <h3>2. Исходные данные</h3><p>Расход ${fmt(c.Q.min)} / ${fmt(c.Q.nom)} / ${fmt(c.Q.max)} м³/ч. Анализ ${esc(st.water.id)} от ${st.water.date}: pH ${fmt(st.water.ph)}, щёлочность ${fmt(st.water.alk)} мг-экв/л, T ${fmt(st.water.T)} °C, мутность ${fmt(st.water.turb)} NTU, цветность ${fmt(st.water.color)} град., ПО ${fmt(st.water.po)} мг O₂/л.</p>
+ <h3>3. Принятая схема</h3><p>Исходная вода → предфильтр F-100 → насос P-100 (оба до ввода реагентов, чтобы не разрушать хлопья и не забивать предфильтр коагулянтом) → ${st.ph.mode==="none"?"":"коррекция pH → "}ввод коагулянта ${R.short} → ${st.mix.type.toLowerCase()} → контактная камера CT-101 (резерв CT-102) → УФ.</p>
+ <h3>4. Методика</h3><p>Материальные балансы M-01…M-07, M-09, M-11, M-12 (версия 1.0). Предварительная оценка доз не применялась. Расход щёлочности — стехиометрический баланс (M-06), не прогноз pH.</p>
+ <h3>5. Дозы и расходы</h3><p>Продукт ${esc(P.name)}, ${fmt(P.c)} % по ${basisName(st.r,P.cb,P.hn)}. Доза ${fmt(c.dMe.min)}–${fmt(c.dMe.max)} мг/л ${R.me}, расчётная ${fmt(c.dMe.nom)} мг/л ${R.me} (задана пользователем). При Qnom: товарный продукт ${fmt(c.flows[1].Mp)} кг/ч${P.form==="liquid"?" ("+fmt(c.flows[1].Lp)+" л/ч)":""}, рабочий раствор ${fmt(c.flows[1].Lw)} л/ч.</p>
+ <h3>6. Коррекция pH</h3><p>${{none:"Не предусмотрена.",unknown:"Необходимость не определена: недостаточно данных.",acid:"Кислота "+st.ph.reag+", доза "+fmt(c.ph.d)+" мг/л 100 % вещества.",base:"Щёлочь "+st.ph.reag+", доза "+fmt(c.ph.d)+" мг/л 100 % вещества."}[st.ph.mode]}</p>
+ <h3>7. Трубопровод</h3><p>L-101, ${st.pipe.mat}: расчётный dвн ${fmt(c.pipe.dCalc)} мм при ${QL[st.pipe.qBasis]} и v = ${fmt(st.pipe.v)} м/с. ${isNum(st.pipe.din)?"Принят dвн "+fmt(st.pipe.din)+" мм.":"Стандартный типоразмер требует уточнения по каталогу."} Потери давления не рассчитывались.</p>
+ <h3>8. Насосы</h3><p>${c.pumps.map(u=>`${u.tag}: ${fmt(u.qmin)}–${fmt(u.qmax)} л/ч, давление не менее ${fmt(u.p)} бар.`).join(" ")} Указаны требуемые характеристики; модель насоса не выбрана.</p>
+ <h3>9. Контактные камеры</h3><p>CT-101/102 по ${fmt(c.ch.Vg)} м³ (каждая на 100 % ${QL[st.mix.qBasis]}). Время ${fmt(st.mix.t)} с — ${esc(st.mix.tBasis||"основание не указано")}.</p>
+ <h3>10. Ограничения</h3><p>Не выполнялись: прогноз SDI15, остаточного металла и ПО; полный гидравлический расчёт; подбор оборудования по каталогам.</p>
+ <h3>11. Требуемые проверки</h3><ul class="small">${c.W.map(w=>`<li>${w[1]}</li>`).join("")}<li>Требования к качеству (${st.req.map(q=>q.p).join(", ")}): достижение подтвердить испытаниями.</li></ul>
+ <h3>12. Спецификация</h3><p>См. таблицу справа — те же позиции, что на P&ID.</p></article>
+ <div class="panel"><h2>Спецификация оборудования</h2><div class="tw"><table><thead><tr><th>Позиция</th><th>Наименование</th><th>Параметры</th><th>Статус</th></tr></thead><tbody>${E.map(e=>`<tr><td class="tag">${e.tag}</td><td>${e.name}</td><td class="small">${e.params}</td><td><span class="small" style="color:${EST[e.status][1]}">${EST[e.status][0]}</span></td></tr>`).join("")}</tbody></table></div></div></div>`;};
+
+V.export=()=>{const v=cur();return `
+<h1>Экспорт</h1><p class="lead">Экспорт возможен только из сохранённой версии. В прототипе файлы не формируются — показан состав.</p>
+${v?versionPick():msgs([["bad","Нет сохранённой версии. Сохраните расчёт, чтобы экспортировать."]])}
+<div class="grid3">${[["PDF-отчёт","Пояснительная записка, лист ТКП, P&ID, допущения, предупреждения, статус. Колонтитул: ID, версия, дата, язык."],["Excel","Листы: Исходные данные, Паспорт продукта, Дозы и расходы, Оборудование, Допущения, Предупреждения."],["Спецификация","Позиции, наименования, параметры, статус (рассчитано / условно / уточнить)."]].map(([h,d])=>`<div class="panel"><h3>${h}</h3><p class="small muted">${d}</p><div class="f"><label for="xl-${h}">Язык отчёта</label><select id="xl-${h}"><option>Русский</option><option>English</option><option>简体中文</option></select></div><div class="btns"><button class="btn" type="button" ${v?"":"disabled"} onclick="toast('В прототипе экспорт не формируется')">Сформировать</button></div></div>`).join("")}</div>
+<p class="footnote">Для китайского языка в PDF встраивается шрифт Noto Sans SC.</p>`;};
+
+V.journal=()=>`
+<div class="eyebrow">Этап 3 · концепция · не реализуется в v1</div><h1>Эксплуатационный журнал</h1><p class="lead">Контроль режима коагуляции по фактическим анализам и дозам. Здесь — только описание для согласования.</p>
+<div class="grid3">
+ <div class="panel"><h3>Исходная вода</h3><p class="small muted">pH, щёлочность, температура, Al/Fe общ., мутность, цветность, ПО, ВВ; для FeSO₄ — O₂ раств. и Fe²⁺.</p></div>
+ <div class="panel"><h3>Перед УФ</h3><p class="small muted">pH, щёлочность, Al/Fe в лабораторно отфильтрованной пробе: тип ленты (синяя / белая), производитель фильтра, метод подготовки, метод определения металла.</p></div>
+ <div class="panel"><h3>Ультрафильтрат</h3><p class="small muted">Мутность, цветность, ПО, ВВ и показатели, выбранные проектом.</p></div></div>
+<div class="panel" style="margin-top:20px"><h3>Запись журнала (макет)</h3><div class="tw"><table><thead><tr><th>Время отбора</th><th>Точка</th><th>Набор проб</th><th class="n">Доза коагулянта</th><th class="n">Доза pH-реагента</th><th class="n">Q, м³/ч</th><th>Партия</th><th>Комментарий</th></tr></thead><tbody><tr class="muted"><td>—</td><td>—</td><td>—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td>—</td><td>—</td></tr></tbody></table></div>
+ <div class="msg info small">Размер пор по цвету ленты не назначается. Результат не называется «растворённым металлом» без согласованной методики. Предупреждения о гидролизе различают измерение и косвенную оценку.</div></div>`;
+
+/* ============ Маршрутизация и события ============ */
+let ROUTE="home";
+function go(r){location.hash=r;}
+function renderRail(){document.getElementById("rail").innerHTML=ROUTES.map(([g,items])=>`<h4>${t(g)}</h4>`+items.map(([k,n])=>`<a href="#${k}"${k===ROUTE?' aria-current="page"':""}><span class="n">${n}</span>${t(k)}</a>`).join("")).join("");
+ document.getElementById("demoflag").textContent=t("demo");}
+function rerender(){C=compute(S);renderRail();const m=document.getElementById("main");m.innerHTML=(t("i18n")?`<div class="msg info small" style="margin-top:0">${t("i18n")}</div>`:"")+(V[ROUTE]||V.home)();}
+function refreshLive(){C=compute(S);document.querySelectorAll("[data-live]").forEach(el=>{el.innerHTML=LIVE[el.dataset.live]();});}
+function route(){const h=location.hash.replace("#","");ROUTE=V[h]?h:"home";rerender();window.scrollTo(0,0);}
+function parseVal(el){const ty=el.dataset.t;if(ty==="bool")return el.checked;if(ty==="num"){const s=el.value.trim().replace(",",".");if(s==="")return null;const v=Number(s);return isFinite(v)?v:null;}return el.value;}
+document.addEventListener("input",e=>{const el=e.target;if(!el.dataset||!el.dataset.k||el.dataset.full)return;const p=el.dataset.k;
+ if(p.startsWith("ph.curve.")){const[,,i,j]=p.split(".");S.ph.curve[+i][+j]=parseVal(el);} else setP(p,parseVal(el));
+ if(el.dataset.t==="num"){const v=parseVal(el);el.closest(".f")?.classList.toggle("missing",v===null&&!!el.closest(".f")?.querySelector(".req"));}
+ refreshLive();});
+document.addEventListener("change",e=>{const el=e.target;if(!el.dataset||!el.dataset.k||!el.dataset.full)return;let v=parseVal(el);setP(el.dataset.k,v);rerender();});
+document.querySelectorAll("[data-lang]").forEach(b=>b.addEventListener("click",()=>{LANG=b.dataset.lang;document.querySelectorAll("[data-lang]").forEach(x=>x.setAttribute("aria-pressed",x===b?"true":"false"));document.documentElement.lang=LANG==="zh"?"zh-Hans":LANG;rerender();}));
+function toast(m){let el=document.getElementById("toast");if(!el){el=document.createElement("div");el.id="toast";el.setAttribute("role","status");el.style.cssText="position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--sheet);padding:8px 14px;border-radius:4px;font-size:13px;z-index:9";document.body.appendChild(el);}el.textContent=m;el.hidden=false;clearTimeout(el._t);el._t=setTimeout(()=>el.hidden=true,2200);}
+
+// Демо-версии: ПОХА и FeCl₃ на одинаковых исходных данных
+(function seed(){const keep=JSON.parse(JSON.stringify(S));
+ S.versions.push(snap());S.cmp.push(1);
+ S.r="fecl3";S.dose={min:3,nom:5,max:8,basis:"metal",hn:6};S.versions.push(snap());S.cmp.push(2);
+ Object.assign(S,{...keep,versions:S.versions,cmp:S.cmp});S.selVersion=1;})();
+window.addEventListener("hashchange",route);route();
+</script>

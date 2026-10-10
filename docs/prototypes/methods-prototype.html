@@ -1,0 +1,545 @@
+<title>Расчётные методики UF Depot</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: engineering workbench — fixed left rail (screen map), working sheet on the right; outputs sit beside inputs as "calc sheets". */
+:root{
+  --bg:#f3f5f6; --sheet:#ffffff; --ink:#18232b; --ink2:#4d5d68; --line:#d5dde2; --soft:#e9eef1;
+  --accent:#0b6e8a; --accent-soft:#dcedf2;
+  --good:#2f7d4f; --good-soft:#e1f1e7; --warn:#a4620a; --warn-soft:#fbefd9; --bad:#b23b2e; --bad-soft:#f8e2df;
+  --demo:#6b4fa3; --demo-soft:#ece6f6;
+  --f-display:"IBM Plex Sans Condensed","Noto Sans SC","Arial Narrow",sans-serif;
+  --f-body:"IBM Plex Sans","Noto Sans SC",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1519; --sheet:#162026; --ink:#e3eaee; --ink2:#9fb0ba; --line:#2b3a43; --soft:#1d2a31;
+  --accent:#4fb3d0; --accent-soft:#16323c; --good:#6cc08f; --good-soft:#173226; --warn:#e2a54c; --warn-soft:#3a2b14;
+  --bad:#ec8275; --bad-soft:#3b1d19; --demo:#b59ae6; --demo-soft:#2a2240; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1519; --sheet:#162026; --ink:#e3eaee; --ink2:#9fb0ba; --line:#2b3a43; --soft:#1d2a31;
+  --accent:#4fb3d0; --accent-soft:#16323c; --good:#6cc08f; --good-soft:#173226; --warn:#e2a54c; --warn-soft:#3a2b14;
+  --bad:#ec8275; --bad-soft:#3b1d19; --demo:#b59ae6; --demo-soft:#2a2240; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.5}
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--sheet);border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;padding:10px 16px}
+.brand{font-family:var(--f-display);font-weight:600;font-size:17px;letter-spacing:.01em}
+.brand small{font-family:var(--f-mono);font-weight:400;font-size:11px;color:var(--ink2);margin-left:6px}
+.demo-flag{font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;background:var(--demo-soft);color:var(--demo);border:1px solid var(--demo);padding:2px 8px;border-radius:3px}
+.spacer{flex:1}
+.lang{display:flex;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.lang button{border:0;background:transparent;color:var(--ink2);padding:4px 10px;font:500 12px var(--f-mono);cursor:pointer}
+.lang button[aria-pressed="true"]{background:var(--accent);color:#fff}
+.wrap{display:grid;grid-template-columns:240px minmax(0,1fr);min-height:calc(100% - 52px)}
+nav.rail{border-right:1px solid var(--line);padding:16px 0;background:var(--sheet)}
+.rail h4{font:600 11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink2);margin:14px 16px 4px}
+.rail a{display:flex;gap:8px;align-items:baseline;padding:5px 16px;color:var(--ink);text-decoration:none;font-size:13px;border-left:3px solid transparent}
+.rail a .n{font:400 11px var(--f-mono);color:var(--ink2);width:18px;flex:none}
+.rail a:hover{background:var(--soft)}
+.rail a[aria-current="page"]{border-left-color:var(--accent);background:var(--accent-soft);font-weight:500}
+main{padding-block:24px 64px;padding-inline:clamp(16px,3vw,40px);min-width:0}
+h1{font-family:var(--f-display);font-weight:600;font-size:26px;line-height:1.2;margin:0 0 4px;text-wrap:balance}
+h2{font-family:var(--f-display);font-weight:600;font-size:19px;margin:0 0 10px}
+h3{font-size:14px;font-weight:600;margin:0 0 8px}
+.lead{color:var(--ink2);max-width:72ch;margin:0 0 20px}
+.eyebrow{font:500 11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:6px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:20px;align-items:start}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:16px}
+.panel{background:var(--sheet);border:1px solid var(--line);border-radius:6px;padding:18px;min-width:0}
+.panel + .panel{margin-top:0}
+.stack{display:flex;flex-direction:column;gap:20px}
+.calc{background:var(--soft);border:1px solid var(--line);border-radius:6px;padding:16px;min-width:0}
+.calc h3{font-family:var(--f-mono);font-weight:500;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2)}
+.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:12px 16px}
+.f label{display:block;font-size:12px;color:var(--ink2);margin-bottom:3px}
+.f label .req{color:var(--bad)}
+.f .row{display:flex;gap:6px;align-items:center}
+.f input,.f select,.f textarea{width:100%;min-width:0;font:400 14px var(--f-body);padding:6px 8px;border:1px solid var(--line);border-radius:4px;background:var(--sheet);color:var(--ink)}
+.f input[type=number],.f input.num{font-family:var(--f-mono);text-align:right}
+.f .u{font:400 12px var(--f-mono);color:var(--ink2);white-space:nowrap;min-width:46px}
+.f .hint{font-size:11.5px;color:var(--ink2);margin-top:3px}
+.f.missing input{border-color:var(--warn);background:var(--warn-soft)}
+input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+details{border-top:1px dashed var(--line);margin-top:14px;padding-top:10px}
+summary{cursor:pointer;font-weight:500;font-size:13px;color:var(--accent)}
+.btn{font:500 13px var(--f-body);border:1px solid var(--accent);background:var(--accent);color:#fff;padding:7px 14px;border-radius:4px;cursor:pointer;text-decoration:none;display:inline-block}
+.btn.ghost{background:transparent;color:var(--accent)}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.seg label{padding:6px 12px;cursor:pointer;font-size:13px;border-right:1px solid var(--line)}
+.seg label:last-child{border-right:0}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label:has(input:checked){background:var(--accent);color:#fff}
+.seg label:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:-2px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+.tw{overflow-x:auto;max-width:100%}
+th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+th{font-weight:500;font-size:12px;color:var(--ink2);background:var(--soft)}
+td.n,th.n{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.basis{font:400 11px var(--f-mono);color:var(--accent);background:var(--accent-soft);padding:1px 5px;border-radius:3px;white-space:nowrap}
+.pill{display:inline-flex;align-items:center;gap:5px;font:500 11.5px var(--f-body);padding:2px 8px;border-radius:999px;white-space:nowrap;border:1px solid}
+.pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.s-user{color:var(--accent);background:var(--accent-soft);border-color:var(--accent)}
+.s-balance{color:var(--good);background:var(--good-soft);border-color:var(--good)}
+.s-prelim{color:var(--demo);background:var(--demo-soft);border-color:var(--demo)}
+.s-clarify{color:var(--warn);background:var(--warn-soft);border-color:var(--warn)}
+.s-incomplete,.s-nodata{color:var(--bad);background:var(--bad-soft);border-color:var(--bad)}
+.msg{border-left:3px solid;padding:8px 12px;border-radius:0 4px 4px 0;font-size:13px;margin:8px 0}
+.msg.warn{border-color:var(--warn);background:var(--warn-soft)}
+.msg.bad{border-color:var(--bad);background:var(--bad-soft)}
+.msg.info{border-color:var(--accent);background:var(--accent-soft)}
+.msg.demo{border-color:var(--demo);background:var(--demo-soft)}
+.msg b{font-weight:600}
+.stub{background:repeating-linear-gradient(135deg,var(--demo-soft) 0 8px,transparent 8px 16px);border:1px dashed var(--demo);border-radius:6px;padding:14px}
+.kv{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 16px;font-size:13px}
+.kv dt{color:var(--ink2)} .kv dd{margin:0;font-family:var(--f-mono);text-align:right;font-variant-numeric:tabular-nums}
+.steps{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 20px;padding:0;list-style:none}
+.steps a{display:flex;gap:6px;align-items:center;text-decoration:none;color:var(--ink2);font-size:12.5px;border:1px solid var(--line);border-radius:4px;padding:4px 10px;background:var(--sheet)}
+.steps a[aria-current="step"]{border-color:var(--accent);color:var(--ink);background:var(--accent-soft)}
+.steps .dot{width:8px;height:8px;border-radius:50%;background:var(--line)}
+.steps .ok{background:var(--good)} .steps .wn{background:var(--warn)} .steps .er{background:var(--bad)}
+.formula{font-family:var(--f-mono);font-size:12.5px;background:var(--sheet);border:1px solid var(--line);border-radius:4px;padding:6px 10px;margin:6px 0;overflow-x:auto;white-space:nowrap}
+.tool-card{display:flex;flex-direction:column;gap:6px}
+.tool-card .st{font:500 11px var(--f-mono);letter-spacing:.06em;text-transform:uppercase}
+.hero{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:28px;align-items:center;margin-bottom:28px}
+.hero h1{font-size:clamp(26px,3.6vw,38px)}
+.svgbox{overflow-x:auto;background:var(--sheet);border:1px solid var(--line);border-radius:6px;padding:8px}
+.svgbox svg{display:block;min-width:900px;width:100%;height:auto}
+.svgbox.small svg{min-width:640px}
+.tkp{background:var(--sheet);border:1px solid var(--line);border-radius:6px;padding:28px;max-width:1000px}
+.tkp-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;border-bottom:2px solid var(--ink);padding-bottom:12px;margin-bottom:18px}
+.figs{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr));gap:12px;margin:16px 0}
+.fig{border:1px solid var(--line);border-radius:4px;padding:10px 12px}
+.fig .v{font:500 20px var(--f-mono);font-variant-numeric:tabular-nums}
+.fig .l{font-size:12px;color:var(--ink2)}
+.note-doc{max-width:78ch}
+.note-doc h3{font-family:var(--f-display);font-size:16px;margin:22px 0 6px}
+.note-doc p{margin:0 0 8px}
+.tree{list-style:none;padding-left:0;margin:0;font-size:13px}
+.tree ul{list-style:none;padding-left:20px;border-left:1px dashed var(--line);margin:4px 0 4px 6px}
+.tree li{padding:3px 0}
+.tag{font:500 12px var(--f-mono)}
+.muted{color:var(--ink2)}
+.mono{font-family:var(--f-mono)}
+.small{font-size:12px}
+.footnote{font-size:12px;color:var(--ink2);margin-top:12px}
+@media (max-width:820px){.wrap{grid-template-columns:1fr} nav.rail{border-right:0;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:2px;padding:8px 8px} .rail h4{width:100%;margin:6px 8px 2px} .rail a{border-left:0;border-radius:4px;padding:4px 8px} .hero{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+<style>
+.tabs{display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid var(--line);margin:0 0 22px}
+.tabs a{padding:8px 12px;font-size:13px;color:var(--ink2);text-decoration:none;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs a .n{font:500 11px var(--f-mono);margin-right:5px;color:var(--ink2)}
+.tabs a[aria-current="page"]{color:var(--ink);border-bottom-color:var(--accent);font-weight:500}
+.pipe-stages{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:10px;counter-reset:st}
+.stage{border:1px solid var(--line);border-radius:6px;padding:12px;background:var(--sheet);position:relative}
+.stage .k{font:600 11px var(--f-mono);color:var(--accent)}
+.stage h3{margin:4px 0 6px;font-size:13.5px}
+.stage p{margin:0;font-size:12px;color:var(--ink2)}
+.mcard{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 16px;align-items:start;border:1px solid var(--line);border-radius:6px;padding:14px;background:var(--sheet);cursor:pointer}
+.mcard[aria-selected="true"]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.mcard .id{font:500 12px var(--f-mono);color:var(--ink2)}
+.mlist{display:grid;gap:10px}
+.diff-up{color:var(--bad)} .diff-dn{color:var(--good)} .diff-eq{color:var(--ink2)}
+.trace{counter-reset:step;display:grid;gap:14px}
+.tstage{border:1px solid var(--line);border-radius:6px;background:var(--sheet)}
+.tstage>header{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:baseline;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--soft);border-radius:6px 6px 0 0}
+.tstage>header b{font:600 12px var(--f-mono);color:var(--accent)}
+.tstage>header h3{margin:0;font-size:14px}
+.trow{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1.6fr) minmax(0,.8fr) auto;gap:6px 14px;padding:8px 14px;border-bottom:1px dashed var(--line);font-size:13px;align-items:baseline}
+.trow:last-child{border-bottom:0}
+.trow .sub{font-family:var(--f-mono);font-size:12px;color:var(--ink2);overflow-wrap:anywhere}
+.trow .res{font-family:var(--f-mono);text-align:right;white-space:nowrap}
+@media (max-width:760px){.trow{grid-template-columns:1fr}.trow .res{text-align:left}}
+.ok{color:var(--good)} .fail{color:var(--bad)}
+.ro input,.ro select,.ro textarea{background:var(--soft);pointer-events:none}
+code.x{font-family:var(--f-mono);font-size:12.5px;background:var(--soft);padding:1px 5px;border-radius:3px}
+.dosegrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:10px}
+.dose{border:1px solid var(--line);border-radius:6px;padding:12px;background:var(--sheet)}
+.dose .v{font:500 22px var(--f-mono)} .dose .l{font-size:12px;color:var(--ink2)}
+.dose.acc{border-color:var(--accent);background:var(--accent-soft)}
+</style>
+
+<header class="top">
+  <div class="brand">UF Depot <small>· Механизм расчётных методик</small></div>
+  <span class="demo-flag">ПРОЕКТИРОВАНИЕ · ДЕМО-ДАННЫЕ</span>
+  <div class="spacer"></div>
+  <span class="small" style="color:var(--ink2)">Пользователь: demo@example.com</span>
+</header>
+<main id="main" style="max-width:1240px;margin:0 auto"></main>
+
+<script>
+"use strict";
+/* =====================================================================
+   ENGINE — расчётное ядро. Не зависит от UI, паспортов и справочников:
+   получает всё через аргументы, возвращает результаты и протокол (trace).
+   ===================================================================== */
+const ENGINE_VERSION="0.1-proto";
+const isNum=v=>typeof v==="number"&&isFinite(v);
+
+/* --- безопасный разбор выражений (без eval): + − * / ^ ( ), min max sqrt ln exp abs --- */
+const Expr=(()=>{
+ const FN={min:Math.min,max:Math.max,sqrt:Math.sqrt,ln:Math.log,exp:Math.exp,abs:Math.abs};
+ function tok(s){const t=[];let i=0;while(i<s.length){const c=s[i];
+  if(/\s/.test(c)){i++;continue}
+  if(/[0-9.]/.test(c)){let j=i;while(j<s.length&&/[0-9.eE]/.test(s[j]))j++;t.push({t:"n",v:parseFloat(s.slice(i,j))});i=j;continue}
+  if(/[A-Za-z_А-Яа-я]/.test(c)){let j=i;while(j<s.length&&/[A-Za-z0-9_А-Яа-я]/.test(s[j]))j++;t.push({t:"id",v:s.slice(i,j)});i=j;continue}
+  if("+-*/^(),".includes(c)){t.push({t:c});i++;continue}
+  throw new Error("Недопустимый символ «"+c+"»");}return t;}
+ function parse(s){const t=tok(s);let p=0;const peek=()=>t[p],eat=k=>{if(!t[p]||t[p].t!==k)throw new Error("Ожидалось «"+k+"»");return t[p++];};
+  function E(){let n=T();while(peek()&&(peek().t==="+"||peek().t==="-")){const o=t[p++].t;n={o,a:n,b:T()};}return n;}
+  function T(){let n=F();while(peek()&&(peek().t==="*"||peek().t==="/")){const o=t[p++].t;n={o,a:n,b:F()};}return n;}
+  function F(){let n=U();if(peek()&&peek().t==="^"){p++;n={o:"^",a:n,b:F()};}return n;}
+  function U(){if(peek()&&peek().t==="-"){p++;return {o:"neg",a:U()};}return P();}
+  function P(){const k=peek();if(!k)throw new Error("Неожиданный конец выражения");
+   if(k.t==="n"){p++;return {n:k.v};}
+   if(k.t==="id"){p++;if(peek()&&peek().t==="("){p++;const args=[E()];while(peek()&&peek().t===","){p++;args.push(E());}eat(")");if(!FN[k.v])throw new Error("Неизвестная функция "+k.v);return {f:k.v,args};}return {v:k.v};}
+   if(k.t==="("){p++;const n=E();eat(")");return n;}throw new Error("Неожиданный символ");}
+  const ast=E();if(p<t.length)throw new Error("Лишние символы в конце");return ast;}
+ function ev(n,vars){if("n" in n)return n.n;if("v" in n){if(!(n.v in vars))throw new Error("Не задана переменная "+n.v);return vars[n.v];}
+  if(n.f)return FN[n.f](...n.args.map(a=>ev(a,vars)));const a=ev(n.a,vars);if(n.o==="neg")return -a;const b=ev(n.b,vars);
+  return n.o==="+"?a+b:n.o==="-"?a-b:n.o==="*"?a*b:n.o==="/"?a/b:Math.pow(a,b);}
+ function ids(n,acc=new Set()){if("v" in n)acc.add(n.v);if(n.a)ids(n.a,acc);if(n.b)ids(n.b,acc);if(n.args)n.args.forEach(x=>ids(x,acc));return acc;}
+ function subst(s,vars,fmt){return tok(s).map(k=>k.t==="n"?fmt(k.v):k.t==="id"?(k.v in vars?fmt(vars[k.v]):k.v):k.t===","?", ":k.t==="*"?"·":` ${k.t} `.replace(/ ([()]) /,"$1")).join("").replace(/\s+/g," ").trim();}
+ return {parse,ev,ids,subst};
+})();
+
+/* --- стехиометрия --- */
+const A={H:1.008,O:15.999,S:32.06,Cl:35.45,Al:26.982,Fe:55.845};const H2O=2*A.H+A.O,SO4=A.S+4*A.O;
+/* --- профили коагулянтов --- */
+const PROFILES={
+ PACl:{label:"ПОХА / PACl",me:"Al",ox:"Al(III)",salt:null,bases:["Al","Al2O3","product"],alk:{eqPerMol:3,useBasicity:true},checks:["основность и её определение для баланса щёлочности"]},
+ "Al2(SO4)3":{label:"Al₂(SO₄)₃",me:"Al",ox:"Al(III)",salt:{M:2*A.Al+3*SO4,n:2,f:"Al₂(SO₄)₃"},bases:["Al","Al2O3","salt","hydrate","product"],alk:{eqPerMol:3},checks:["безводная соль или кристаллогидрат (n)"]},
+ FeCl3:{label:"FeCl₃",me:"Fe",ox:"Fe(III)",salt:{M:A.Fe+3*A.Cl,n:1,f:"FeCl₃"},bases:["Fe","salt","hydrate","product"],alk:{eqPerMol:3},checks:["доля Fe²⁺ в продукте, если указана"]},
+ "Fe2(SO4)3":{label:"Fe₂(SO₄)₃",me:"Fe",ox:"Fe(III)",salt:{M:2*A.Fe+3*SO4,n:2,f:"Fe₂(SO₄)₃"},bases:["Fe","salt","hydrate","product"],alk:{eqPerMol:3},checks:["доля Fe²⁺ в продукте, если указана"]},
+ FeSO4:{label:"FeSO₄",me:"Fe",ox:"Fe(II)",salt:{M:A.Fe+SO4,n:1,f:"FeSO₄"},bases:["Fe","salt","hydrate","product"],alk:{eqPerMol:2,note:"Fe²⁺ → Fe(OH)₃ при окислении O₂"},checks:["независимый статус проверки окисления Fe²⁺"]}
+};
+function wMe(prof,basis,hn){const P=PROFILES[prof],me=P.me;
+ if(basis===me)return 1; if(basis==="Al2O3")return 2*A.Al/(2*A.Al+3*A.O);
+ if(basis==="salt")return P.salt.n*A[me]/P.salt.M; if(basis==="hydrate")return P.salt.n*A[me]/(P.salt.M+hn*H2O); return NaN;}
+function basisLabel(prof,b,hn){const P=PROFILES[prof];return b===P.me?P.me:b==="Al2O3"?"Al₂O₃":b==="salt"?P.salt.f+" безв.":b==="hydrate"?P.salt.f+"·"+hn+"H₂O":"товарный продукт";}
+
+/* --- STAGE 1: выбор дозы по методике --- */
+function stageDose(m,inp,user,tr){
+ const st={stage:1,title:"Выбор дозы",rows:[]};tr.push(st);const out={status:null,low:NaN,high:NaN,central:NaN,accepted:NaN,pump:NaN,pumpMin:NaN,basis:m.outputBasis,msgs:[]};
+ st.rows.push(["Методика",`${m.id} · v${m.version} · ${m.modelType}`,(VSTAT[m.validationStatus]||[0,m.validationStatus])[1],"snapshot"]);
+ if(m.modelType==="manual"){
+  out.low=user.dMin;out.high=user.dMax;out.accepted=user.dNom;out.basis=user.basis;
+  st.rows.push(["Диапазон (задан пользователем)",`Dmin…Dmax`,`${f(out.low)}…${f(out.high)} мг/л ${user.basisLabel}`,"user"]);
+  st.rows.push(["Центральная оценка","методика её не задаёт","—","none"]);
+ } else {
+  // входы и область применимости
+  const vars={};for(const v of m.inputVariables){const x=inp[v.name];
+   if(!isNum(x)){out.status="nodata";st.rows.push([`Вход ${v.name}`,`${v.label}, ${v.unit}`,"нет данных","nodata"]);continue;}
+   vars[v.name]=x;const L=m.applicabilityLimits.find(l=>l.var===v.name);const inside=L&&x>=L.min&&x<=L.max;
+   st.rows.push([`Вход ${v.name}`,`${v.label} = ${f(x)} ${v.unit}; область ${L?f(L.min)+"…"+f(L.max):"не задана"}`,inside?"в области":"вне области",inside?"ok":"bad"]);
+   if(!inside)out.status=out.status||"outside";}
+  if(out.status){st.rows.push(["Итог",out.status==="nodata"?"Недостаточно данных для методики":"Вход вне области применимости","оценка не выдаётся","bad"]);return out;}
+  if(m.modelType==="parameterizedExpression"){
+   m.coefficients.forEach(c=>vars[c.name]=c.value);
+   const D=Expr.ev(Expr.parse(m.expression),vars);out.central=D;
+   st.rows.push(["Центральная оценка",`${m.expression} = ${Expr.subst(m.expression,vars,f)}`,`${f(D)} мг/л ${m.outputBasis}`,"prelim"]);
+   const r=m.rangeRule;if(r.type==="relativeBand"){const lo=m.coefficients.find(c=>c.name===r.lower).value,hi=m.coefficients.find(c=>c.name===r.upper).value;
+    out.low=D*(1-lo);out.high=D*(1+hi);
+    st.rows.push(["Предварительный диапазон",`D·(1 − ${r.lower}) … D·(1 + ${r.upper}) = ${f(D)}·${f(1-lo)} … ${f(D)}·${f(1+hi)}`,`${f(out.low)}…${f(out.high)} мг/л ${m.outputBasis}`,"prelim"]);}
+  } else if(m.modelType==="lookupTable"){
+   const x=vars[m.lookup.key];const row=m.lookup.rows.find(r=>x>=r.from&&x<r.to);
+   if(!row){out.status="outside";st.rows.push(["Таблица","строка не найдена","оценка не выдаётся","bad"]);return out;}
+   out.low=row.low;out.high=row.high;
+   st.rows.push(["Строка таблицы",`${m.lookup.key} = ${f(x)} ∈ [${f(row.from)}; ${f(row.to)})`,`${f(row.low)}…${f(row.high)} мг/л ${m.outputBasis}`,"prelim"]);
+   st.rows.push(["Центральная оценка",m.rangeRule.central==="none"?"методика её не задаёт (правило диапазона: только границы)":"—","—","none"]);}
+  out.accepted=isNum(user.accepted)?user.accepted:NaN;
+ }
+ // принятая доза
+ if(!isNum(out.accepted)){out.status="incomplete";st.rows.push(["Принятая доза","не выбрана пользователем","—","bad"]);return out;}
+ const inside=out.accepted>=out.low&&out.accepted<=out.high;
+ st.rows.push(["Доза, принятая пользователем",inside?"внутри диапазона":"ВНЕ диапазона — предупреждение",`${f(out.accepted)} мг/л ${m.modelType==="manual"?user.basisLabel:m.outputBasis}`,inside?"user":"warn"]);
+ if(!inside)out.msgs.push(["warn","Принятая доза вне предварительного диапазона методики."]);
+ // доза для подбора насоса
+ const auto=Math.max(out.high,out.accepted);out.pump=isNum(user.pumpOverride)&&user.pumpOverride>=out.accepted?user.pumpOverride:auto;out.pumpMin=Math.min(out.low,out.accepted);
+ st.rows.push(["Доза для максимальной подачи насоса",isNum(user.pumpOverride)?`задана пользователем (основание: ${user.pumpBasis||"—"})`:`max(верх диапазона; принятая) = max(${f(out.high)}; ${f(out.accepted)})`,`${f(out.pump)} мг/л`,isNum(user.pumpOverride)?"user":"rule"]);
+ st.rows.push(["Доза для минимальной подачи насоса",`min(низ диапазона; принятая) = min(${f(out.low)}; ${f(out.accepted)})`,`${f(out.pumpMin)} мг/л`,"rule"]);
+ out.status=m.modelType==="manual"?"user":"prelim";return out;}
+
+/* --- STAGE 2: конверсия базы --- */
+function stageBasis(prof,dose,user,m,tr){const st={stage:2,title:"Конверсия базы дозирования",rows:[]};tr.push(st);const P=PROFILES[prof];
+ const b=m.modelType==="manual"?user.basisKey:(m.outputBasis===P.me?P.me:m.outputBasis);const hn=user.hn;
+ const w=wMe(prof,b,hn);const toMe=x=>x*w;
+ st.rows.push(["Внутренняя база",`мг/л ${P.me}; входная база — ${basisLabel(prof,b,hn)}`,`w = ${f(w,4)}`,"balance"]);
+ const r={low:toMe(dose.low),high:toMe(dose.high),central:toMe(dose.central),accepted:toMe(dose.accepted),pump:toMe(dose.pump),pumpMin:toMe(dose.pumpMin)};
+ st.rows.push(["Принятая доза по металлу",`${f(dose.accepted)} × ${f(w,4)}`,`${f(r.accepted)} мг/л ${P.me}`,"balance"]);
+ if(P.me==="Al"){const k=1/wMe(prof,"Al2O3");st.rows.push(["То же по Al₂O₃",`${f(r.accepted)} × ${f(k,4)}`,`${f(r.accepted*k)} мг/л Al₂O₃`,"balance"]);}
+ if(P.salt){const k=1/wMe(prof,"salt");st.rows.push([`То же по ${P.salt.f} безв.`,`${f(r.accepted)} × ${f(k,4)}`,`${f(r.accepted*k)} мг/л`,"balance"]);}
+ return r;}
+
+/* --- STAGE 3: товарный и рабочий растворы --- */
+function stageProduct(prof,dMe,pp,Q,tr){const st={stage:3,title:"Товарный и рабочий растворы",rows:[]};tr.push(st);const P=PROFILES[prof];
+ const wP=pp.c/100*wMe(prof,pp.cb,pp.hn);st.rows.push(["Доля металла в товарном продукте",`${f(pp.c)} % по ${basisLabel(prof,pp.cb,pp.hn)} × w`,`${f(wP*100,4)} % ${P.me}`,"balance"]);
+ const Dp=dMe.accepted/wP;st.rows.push(["Доза товарного продукта",`${f(dMe.accepted)} / ${f(wP,4)}`,`${f(Dp)} мг/л`,"balance"]);
+ const Mp=Dp*Q.nom/1000;st.rows.push(["Товарный продукт при Qном",`${f(Dp)} × ${f(Q.nom)} / 1000`,`${f(Mp)} кг/ч`,"balance"]);
+ let Lp=NaN;if(pp.form==="liquid"){Lp=Mp/pp.rho;st.rows.push(["То же, объём",`${f(Mp)} / ${f(pp.rho)} кг/л`,`${f(Lp)} л/ч`,"balance"]);}
+ const cMe=pp.wc*wMe(prof,pp.wcb,pp.hn);st.rows.push(["Рабочий раствор по металлу",`${f(pp.wc)} г/л ${basisLabel(prof,pp.wcb,pp.hn)} × w`,`${f(cMe)} г/л ${P.me}`,"balance"]);
+ const Lw=dMe.accepted*Q.nom/cMe;st.rows.push(["Рабочий раствор при Qном",`${f(dMe.accepted)} × ${f(Q.nom)} / ${f(cMe)} (одна база: ${P.me})`,`${f(Lw)} л/ч`,"balance"]);
+ return {wP,Dp,Mp,Lp,cMe,Lw};}
+
+/* --- STAGE 4: теоретический кислотно-основной баланс --- */
+function stageAcidBase(prof,dMe,pp,water,tr){const st={stage:4,title:"Теоретический кислотно-основной баланс",rows:[]};tr.push(st);const P=PROFILES[prof];
+ let f1=P.alk.eqPerMol/A[P.me];let txt=`${P.alk.eqPerMol} мг-экв/ммоль ÷ ${f(A[P.me],5)}`;
+ if(P.alk.useBasicity){if(!isNum(pp.basicity)||!pp.bdef){st.rows.push(["Основность","не задана или без определения","баланс не выполняется","nodata"]);return {f:NaN};}
+  f1*=1-pp.basicity/100;txt+=` × (1 − ${f(pp.basicity)} %)`;}
+ st.rows.push(["Удельный расход щёлочности",txt+(P.alk.note?"; "+P.alk.note:""),`${f(f1,4)} мг-экв/мг ${P.me}`,"balance"]);
+ const c=dMe.accepted*f1,cmax=dMe.pump*f1;
+ st.rows.push(["При принятой дозе",`${f(dMe.accepted)} × ${f(f1,4)}`,`${f(c,3)} мг-экв/л`,"balance"]);
+ st.rows.push(["При дозе подбора насоса",`${f(dMe.pump)} × ${f(f1,4)}`,`${f(cmax,3)} мг-экв/л`,"balance"]);
+ st.rows.push(["Щёлочность исходной воды","из анализа",`${f(water.alk)} мг-экв/л`,"input"]);
+ st.rows.push(["Теоретический остаток",`${f(water.alk)} − ${f(cmax,3)}`,`${f(water.alk-cmax,3)} мг-экв/л`,"balance"]);
+ st.rows.push(["Ограничение","Баланс не прогнозирует pH и не является расчётом дозы кислоты/щёлочи","","note"]);
+ if(!isNum(pp.freeAcid))st.rows.push(["Допущение","Свободная кислотность продукта не задана и не учтена","","note"]);
+ return {f:f1,c,cmax,rest:water.alk-cmax};}
+
+/* --- STAGE 5: коррекция pH --- */
+function stagePH(ph,Q,tr){const st={stage:5,title:"Определение коррекции pH",rows:[]};tr.push(st);
+ if(ph.mode==="none"){st.rows.push(["Решение","коррекция не предусмотрена (задано пользователем)","—","user"]);return {mode:"none"};}
+ if(ph.mode==="unknown"){st.rows.push(["Решение","недостаточно данных для определения необходимости","—","nodata"]);return {mode:"unknown"};}
+ if(!isNum(ph.d100)){st.rows.push(["Доза","нет ручной дозы и титрационной кривой — точный расход не рассчитывается","—","nodata"]);return {mode:ph.mode};}
+ st.rows.push(["Доза 100 %","задана пользователем",`${f(ph.d100)} мг/л`,"user"]);return {mode:ph.mode,d:ph.d100};}
+
+/* --- STAGE 6: расходы и оборудование --- */
+function stageEquip(dMe,prod,Q,eq,tr){const st={stage:6,title:"Расходы и оборудование",rows:[]};tr.push(st);
+ const qmin=dMe.pumpMin*Q.min/prod.cMe,qnom=dMe.accepted*Q.nom/prod.cMe,qmax=dMe.pump*Q.max/prod.cMe;
+ st.rows.push(["Насос-дозатор: qmin",`D_min,насос × Qmin / C = ${f(dMe.pumpMin)} × ${f(Q.min)} / ${f(prod.cMe)}`,`${f(qmin)} л/ч`,"balance"]);
+ st.rows.push(["Насос-дозатор: qном",`${f(dMe.accepted)} × ${f(Q.nom)} / ${f(prod.cMe)}`,`${f(qnom)} л/ч`,"balance"]);
+ st.rows.push(["Насос-дозатор: qmax",`D_насос × Qmax / C = ${f(dMe.pump)} × ${f(Q.max)} / ${f(prod.cMe)}`,`${f(qmax)} л/ч`,"balance"]);
+ st.rows.push(["Кратность регулирования",`qmax / qmin`,`1:${f(qmax/qmin,2)}`,"balance"]);
+ const V=Q.max*eq.t/3600;st.rows.push(["Контактная камера, Vэфф",`Qmax × t / 3600 = ${f(Q.max)} × ${f(eq.t)} / 3600 (t — допущение пользователя)`,`${f(V)} м³ × 2 камеры`,"assume"]);
+ st.rows.push(["Время при Qmin",`3600 × ${f(V)} / ${f(Q.min)}`,`${f(3600*V/Q.min)} с`,"balance"]);
+ const d=Math.sqrt(4*(Q.max/3600)/(Math.PI*eq.v))*1000;st.rows.push(["Трубопровод, dвн расч.",`√(4·(${f(Q.max)}/3600)/(π·${f(eq.v)}))`,`${f(d)} мм`,"balance"]);
+ return {qmin,qnom,qmax,V,d};}
+
+/* --- FeSO4: независимая проверка окисления --- */
+function stageFe2(prof,dMe,water,ox,tr){if(prof!=="FeSO4")return null;const st={stage:"Fe²⁺",title:"Проверка окисления Fe²⁺ (независимый статус)",rows:[]};tr.push(st);
+ const need=dMe.pump*A.O*2/(4*A.Fe);
+ st.rows.push(["Стехиометрическая потребность O₂",`${f(dMe.pump)} × 32 / (4 × ${f(A.Fe,5)})`,`${f(need,3)} мг/л`,"balance"]);
+ st.rows.push(["Растворённый O₂",isNum(water.o2)?"из анализа":"нет данных",isNum(water.o2)?`${f(water.o2)} мг/л`:"—",isNum(water.o2)?"input":"nodata"]);
+ if(isNum(water.o2))st.rows.push(["Стехиометрическая обеспеченность",water.o2>=need?"O₂ ≥ потребности":"O₂ < потребности",water.o2>=need?"обеспечено":"не обеспечено",water.o2>=need?"ok":"bad"]);
+ st.rows.push(["Завершённость окисления за контактное время","Стехиометрическая обеспеченность не подтверждает завершения окисления",OXLABEL[ox.status],"ox"]);
+ return {need,status:ox.status};}
+const OXLABEL={unchecked:"не проверено",required:"требуется проверка",method:"подтверждено методикой",test:"подтверждено испытанием"};
+
+/* --- общий запуск --- */
+function run(c){const tr=[],W=[];let status;
+ tr.push({stage:0,title:"Снимок входных данных",rows:[["Расчёт",`${c.id} · версия ${c.v} · ядро ${ENGINE_VERSION}`,c.created,"snapshot"],["Коагулянт",PROFILES[c.prof].label+" · "+PROFILES[c.prof].ox,c.pp.name,"snapshot"],["Расход",`Qmin / Qном / Qmax`,`${f(c.Q.min)} / ${f(c.Q.nom)} / ${f(c.Q.max)} м³/ч`,"input"],["Вода",`цветность ${f(c.water.color)} град., мутность ${f(c.water.turb)} NTU, T ${f(c.water.T)} °C, щёлочность ${f(c.water.alk)} мг-экв/л`,"анализ "+c.water.id,"input"]]});
+ const dose=stageDose(c.method,c.water,c.user,tr);
+ if(dose.status==="nodata"||dose.status==="outside"||dose.status==="incomplete")return {tr,dose,status:dose.status==="incomplete"?"incomplete":"nodata",W:[["bad",dose.status==="outside"?"Вход вне области применимости методики: оценка не выдаётся. Можно перейти к ручной дозе.":"Недостаточно данных: оценка не выдаётся."]]};
+ W.push(...dose.msgs);
+ const dMe=stageBasis(c.prof,dose,c.user,c.method,tr);const prod=stageProduct(c.prof,dMe,c.pp,c.Q,tr);
+ const ab=stageAcidBase(c.prof,dMe,c.pp,c.water,tr);const ph=stagePH(c.ph,c.Q,tr);const eq=stageEquip(dMe,prod,c.Q,c.eq,tr);const fe=stageFe2(c.prof,dMe,c.water,c.ox,tr);
+ tr.push({stage:"Q",title:"Требования к качеству",rows:c.req.map(r=>[r[0],`${r[1]} · ${r[2]}`,"Достижение расчётом не подтверждено; требуется проверка","note"])});
+ if(c.method.validationStatus!=="published")W.push(["warn","Предварительная оценка выполнена по пользовательской методике без верификации."]);
+ if(fe&&fe.status!=="method"&&fe.status!=="test")W.push(["bad","FeSO₄: завершённость окисления Fe²⁺ не подтверждена. Безусловная рекомендация не выдаётся."]);
+ W.push(["warn","Контактное время задано пользователем без обоснования (ДЕМО)."]);
+ status=dose.status==="user"?(W.some(w=>w[0]==="bad")?"clarify":"user"):"prelim";
+ return {tr,dose,dMe,prod,ab,ph,eq,fe,status,W};}
+
+/* формат */
+function f(x,d){if(!isNum(x))return "—";const a=Math.abs(x);const dd=d??(a>=100?1:a>=10?2:a>=1?3:3);return Number(x.toFixed(dd)).toLocaleString("ru-RU",{maximumFractionDigits:dd});}
+
+/* =====================================================================
+   РЕЕСТР МЕТОДИК — версионируемые неизменяемые записи (демо-хранилище)
+   ===================================================================== */
+const NOW="2026-10-10";
+const manual=prof=>({id:"PUB-MANUAL-"+prof.replace(/[()]/g,""),version:1,coagulantType:prof,productScope:"любой продукт типа",modelType:"manual",inputVariables:[],outputBasis:"задаёт пользователь",coefficients:[],applicabilityLimits:[],rangeRule:{type:"userMinMax"},source:"Не требуется: доза задаётся пользователем",validationStatus:"published",testCases:[],author:"UF Depot",createdAt:NOW,scope:"public",note:"Ручная доза"});
+let REG=[...Object.keys(PROFILES).map(manual),
+ {id:"PUB-TPL-LINEAR",version:1,coagulantType:"любой",productScope:"—",modelType:"parameterizedExpression",inputVariables:[],outputBasis:"",expression:"",coefficients:[],applicabilityLimits:[],rangeRule:{type:"relativeBand"},source:"Шаблон без коэффициентов",validationStatus:"template",testCases:[],author:"UF Depot",createdAt:NOW,scope:"public",note:"Шаблон: параметрическое выражение"},
+ {id:"PUB-TPL-LOOKUP",version:1,coagulantType:"любой",productScope:"—",modelType:"lookupTable",inputVariables:[],outputBasis:"",lookup:{key:"",rows:[]},coefficients:[],applicabilityLimits:[],rangeRule:{type:"tableLowHigh",central:"none"},source:"Шаблон без строк",validationStatus:"template",testCases:[],author:"UF Depot",createdAt:NOW,scope:"public",note:"Шаблон: таблица"},
+ {id:"USR-PACL-DEMO",version:1,parent:"PUB-TPL-LINEAR@1",coagulantType:"PACl",productScope:"ДЕМО-ПОХА-17",modelType:"parameterizedExpression",
+  inputVariables:[{name:"color",label:"цветность",unit:"град. Pt-Co"},{name:"turb",label:"мутность",unit:"NTU"}],outputBasis:"Al",
+  expression:"a + b*color + c*turb",
+  coefficients:[{name:"a",value:0.5,unit:"мг/л Al",basis:"ДЕМО"},{name:"b",value:0.05,unit:"мг/л Al на град.",basis:"ДЕМО"},{name:"c",value:0.1,unit:"мг/л Al на NTU",basis:"ДЕМО"},{name:"kLow",value:0.3,unit:"доля",basis:"ДЕМО"},{name:"kHigh",value:0.3,unit:"доля",basis:"ДЕМО"}],
+  applicabilityLimits:[{var:"color",min:5,max:80,unit:"град. Pt-Co"},{var:"turb",min:0.5,max:20,unit:"NTU"}],
+  rangeRule:{type:"relativeBand",lower:"kLow",upper:"kHigh"},source:"ДЕМО: значения введены для показа механизма. Не являются рекомендацией.",
+  validationStatus:"personal-unverified",testCases:[{inputs:{color:35,turb:6},expect:2.85,tol:0.01},{inputs:{color:10,turb:2},expect:1.2,tol:0.01}],author:"demo@example.com",createdAt:NOW,scope:"personal",note:"Персональная копия шаблона"},
+ {id:"USR-FECL3-DEMO",version:1,parent:"PUB-TPL-LOOKUP@1",coagulantType:"FeCl3",productScope:"ДЕМО-FeCl₃-40",modelType:"lookupTable",
+  inputVariables:[{name:"color",label:"цветность",unit:"град. Pt-Co"}],outputBasis:"Fe",lookup:{key:"color",rows:[{from:5,to:20,low:2,high:4},{from:20,to:50,low:4,high:7},{from:50,to:80,low:6,high:10}]},
+  coefficients:[],applicabilityLimits:[{var:"color",min:5,max:80,unit:"град. Pt-Co"}],rangeRule:{type:"tableLowHigh",central:"none"},
+  source:"ДЕМО: строки введены для показа механизма. Не являются рекомендацией.",validationStatus:"personal-unverified",testCases:[{inputs:{color:35},expectLow:4,expectHigh:7}],author:"demo@example.com",createdAt:NOW,scope:"personal",note:"Персональная копия шаблона"}
+];
+const VSTAT={published:["s-balance","Опубликована"],template:["s-user","Шаблон без коэффициентов"],"personal-unverified":["s-clarify","Личная, не верифицирована"],"personal-validated":["s-prelim","Личная, тесты пройдены"]};
+const latest=id=>REG.filter(m=>m.id===id).sort((a,b)=>b.version-a.version)[0];
+const byRef=ref=>{const[id,v]=ref.split("@");return REG.find(m=>m.id===id&&m.version===+v);};
+const clone=o=>JSON.parse(JSON.stringify(o));
+
+/* демо-контекст проекта */
+const PROJECT={water:{id:"ДЕМО-А-0915",color:35,turb:6,T:8,alk:2.1,o2:9},Q:{min:40,nom:120,max:120},
+ pp:{PACl:{name:"ДЕМО-ПОХА-17",form:"liquid",c:17,cb:"Al2O3",rho:1.37,basicity:70,bdef:"[OH]/(3·[Al])",freeAcid:null,wc:10,wcb:"Al2O3",hn:null},
+     FeSO4:{name:"ДЕМО-FeSO₄·7H₂O",form:"solid",c:98,cb:"hydrate",hn:7,rho:null,wc:100,wcb:"hydrate",basicity:null,bdef:"",freeAcid:null},
+     FeCl3:{name:"ДЕМО-FeCl₃-40",form:"liquid",c:40,cb:"salt",rho:1.42,wc:20,wcb:"salt",hn:null,basicity:null,bdef:"",freeAcid:null}},
+ req:[["SDI15","≤ 3","ультрафильтрат"],["Остаточный Al","≤ 0,2 мг/л","ультрафильтрат"],["ПО","≤ 3 мг O₂/л","ультрафильтрат"]],eq:{t:60,v:1.5}};
+
+/* сохранённые расчёты = неизменяемые снимки */
+let CALCS=[];
+function makeCalc(id,prof,methodRef,user,extra={}){const m=clone(byRef(methodRef));
+ const c={id,v:CALCS.filter(x=>x.id===id).length+1,created:extra.created||NOW,prof,methodRef,method:m,
+  user:clone(user),water:clone(PROJECT.water),Q:clone(PROJECT.Q),pp:clone(PROJECT.pp[prof]),req:clone(PROJECT.req),eq:clone(PROJECT.eq),ph:{mode:"none"},ox:{status:extra.ox||"required"},note:extra.note||""};
+ c.result=run(c);c.assumptions=["Полный гидролиз до M(OH)₃ (баланс щёлочности)","Контактное время 60 с — ДЕМО, без основания","Камеры 1 раб. + 1 рез., каждая на 100 % Qmax"];CALCS.push(Object.freeze(c));return c;}
+const UPACL={accepted:2.5,basisKey:"Al",hn:null,basisLabel:"Al"};
+makeCalc("RC-0001","PACl","USR-PACL-DEMO@1",UPACL,{note:"Исходный вариант"});
+makeCalc("RC-0002","FeSO4","PUB-MANUAL-FeSO4@1",{dMin:3,dNom:5,dMax:8,basisKey:"Fe",basisLabel:"Fe",hn:7},{note:"Ручная доза, FeSO₄"});
+
+/* =====================================================================
+   UI
+   ===================================================================== */
+const UI={tab:"arch",selProf:"PACl",selMethod:"USR-PACL-DEMO",draft:null,draftErr:[],demoNew:0.04,protoCalc:"RC-0001@1",cmpA:"RC-0001@1",cmpB:null};
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const pill=(cls,t)=>`<span class="pill ${cls}">${t}</span>`;
+const vpill=s=>pill(VSTAT[s][0],VSTAT[s][1]);
+const SPILL={user:["s-user","Задано пользователем"],prelim:["s-prelim","Предварительная оценка"],clarify:["s-clarify","Требуется уточнение"],nodata:["s-nodata","Недостаточно данных"],incomplete:["s-incomplete","Расчёт не завершён"]};
+const spill=s=>pill(SPILL[s][0],SPILL[s][1]);
+const TABS=[["arch","0","Архитектура"],["select","1","Выбор методики"],["editor","2","Редактор"],["change","3","Изменение коэффициента"],["compare","4","До и после"],["history","5","История версий"],["protocol","6","Протокол расчёта"],["sources","7","Требуют подтверждения"]];
+const V={};
+
+V.arch=()=>`<h1>Механизм расчётных методик</h1><p class="lead">Ядро получает методику, паспорт и исходные данные как неизменяемый снимок и проходит шесть независимых этапов. Интерфейс, паспорта реагентов и реестр методик в расчёт не вмешиваются.</p>
+<div class="pipe-stages">${[["1","Выбор дозы","Методика → диапазон, центральная оценка (если задана), принятая доза, доза для насоса"],["2","Конверсия базы","База методики → мг/л металла → Al₂O₃ / соль / гидрат"],["3","Товарный и рабочий растворы","Паспорт → доля металла, кг/ч, л/ч, подача рабочего раствора"],["4","Кислотно-основной баланс","Стехиометрия расхода щёлочности; не прогноз pH"],["5","Коррекция pH","Только ручная доза или титрационная кривая"],["6","Расходы и оборудование","Насосы, камеры, трубопровод"]].map(([k,h,p])=>`<div class="stage"><div class="k">ЭТАП ${k}</div><h3>${h}</h3><p>${p}</p></div>`).join("")}</div>
+<div class="grid2" style="margin-top:22px"><div class="panel"><h2>Запись методики</h2><div class="tw"><table><thead><tr><th>Поле</th><th>Назначение</th></tr></thead><tbody>
+${[["id, version","Неизменяемая пара; правка = новая версия"],["coagulantType","Профиль: PACl, FeCl₃, Fe₂(SO₄)₃, Al₂(SO₄)₃, FeSO₄"],["productScope","Для каких продуктов действует"],["modelType","manual · parameterizedExpression · lookupTable"],["inputVariables","Имя, смысл, единица"],["outputBasis","База результата: Al, Al₂O₃, Fe, соль…"],["coefficients","Значение, единица, основание"],["applicabilityLimits","Границы каждого входа; вне границ оценка не выдаётся"],["rangeRule","Как получается диапазон и есть ли центральная оценка"],["source","Источник / основание"],["validationStatus","Шаблон / опубликована / личная (не)верифицирована"],["testCases","Входы → ожидаемый результат, допуск"],["author, createdAt","Кто и когда создал версию"]].map(r=>`<tr><td class="mono small">${r[0]}</td><td class="small">${r[1]}</td></tr>`).join("")}</tbody></table></div></div>
+<div class="panel"><h2>Профили коагулянтов</h2><div class="tw"><table><thead><tr><th>Профиль</th><th>Металл</th><th>Базы</th><th>Щёлочность</th><th>Особые проверки</th></tr></thead><tbody>
+${Object.entries(PROFILES).map(([k,P])=>`<tr><td>${P.label}</td><td class="mono">${P.ox}</td><td class="small">${P.bases.map(b=>b==="product"?"товарный":b==="salt"?"соль":b==="hydrate"?"гидрат":b.replace("Al2O3","Al₂O₃")).join(", ")}</td><td class="mono small">${P.alk.eqPerMol} мг-экв/ммоль${P.alk.useBasicity?" × (1 − B)":""}</td><td class="small">${P.checks.join("; ")}</td></tr>`).join("")}</tbody></table></div>
+<div class="msg info small">Ручная доза опубликована для всех пяти профилей. Опубликованных методик предварительной оценки нет — только шаблоны без коэффициентов.</div></div></div>`;
+
+V.select=()=>{const list=REG.filter(m=>m.coagulantType===UI.selProf||m.validationStatus==="template").filter((m,i,a)=>latest(m.id)===m);
+ const sel=latest(UI.selMethod);
+ return `<h1>Выбор методики</h1><p class="lead">Проект «ДЕМО — Водоподготовка», линия 1. Анализ ${PROJECT.water.id}: цветность ${PROJECT.water.color} град., мутность ${PROJECT.water.turb} NTU.</p>
+<div class="panel" style="margin-bottom:16px"><div class="f" style="max-width:320px"><label for="selProf">Коагулянт проекта</label><select id="selProf" onchange="UI.selProf=this.value;UI.selMethod=REG.find(m=>m.coagulantType===this.value).id;render()">${Object.entries(PROFILES).map(([k,P])=>`<option value="${k}"${k===UI.selProf?" selected":""}>${P.label} · ${P.ox}</option>`).join("")}</select></div></div>
+<div class="grid2"><div class="mlist">${list.map(m=>`<div class="mcard" role="button" tabindex="0" aria-selected="${m.id===UI.selMethod}" onclick="UI.selMethod='${m.id}';render()"><div><div class="id">${m.id} · v${m.version}</div><h3 style="margin:2px 0">${m.note}</h3><div class="small muted">${m.modelType} · ${m.scope==="public"?"общая":"личная"} · ${esc(m.source)}</div></div><div>${vpill(m.validationStatus)}</div></div>`).join("")}</div>
+<div class="panel">${selDetail(sel)}</div></div>`;};
+function applic(m){if(m.modelType==="manual")return `<div class="msg info small">Ручная доза: область применимости не ограничивается, ответственность за дозу — на пользователе.</div>`;
+ if(m.validationStatus==="template")return `<div class="msg warn small">Шаблон без коэффициентов: к проекту не применяется. Создайте персональную копию и заполните её.</div>`;
+ return `<h3>Проверка применимости к проекту</h3><div class="tw"><table><thead><tr><th>Вход</th><th class="n">Значение</th><th class="n">Область</th><th></th></tr></thead><tbody>${m.inputVariables.map(v=>{const x=PROJECT.water[v.name],L=m.applicabilityLimits.find(l=>l.var===v.name);const ok=isNum(x)&&L&&x>=L.min&&x<=L.max;return `<tr><td>${v.label}</td><td class="n">${f(x)} ${v.unit}</td><td class="n">${L?f(L.min)+"…"+f(L.max):"—"}</td><td>${ok?'<span class="ok">✓ в области</span>':'<span class="fail">вне области / нет данных</span>'}</td></tr>`;}).join("")}</tbody></table></div>`;}
+function selDetail(m){const canApply=m.validationStatus!=="template";
+ return `<div class="eyebrow">${m.id} · версия ${m.version}</div><h2>${m.note}</h2>${vpill(m.validationStatus)}
+ <dl class="kv" style="margin-top:12px"><dt>Тип модели</dt><dd>${m.modelType}</dd><dt>База результата</dt><dd>${m.outputBasis||"—"}</dd><dt>Продукты</dt><dd>${esc(m.productScope)}</dd><dt>Автор · дата</dt><dd>${esc(m.author)} · ${m.createdAt}</dd>${m.parent?`<dt>Копия от</dt><dd>${m.parent}</dd>`:""}</dl>
+ ${m.expression?`<div class="formula">D = ${esc(m.expression)}</div>`:""}
+ <p class="small"><b>Основание:</b> ${esc(m.source)}</p>${applic(m)}
+ <div class="btns">${canApply?`<button class="btn" type="button" onclick="toast('Методика ${m.id} v${m.version} выбрана для расчёта (имитация)')">Применить к расчёту</button>`:""}
+ ${m.scope==="public"&&m.modelType!=="manual"?`<button class="btn ghost" type="button" onclick="copyMethod('${m.id}')">Создать персональную копию</button>`:""}
+ ${m.scope==="personal"?`<button class="btn ghost" type="button" onclick="openEditor('${m.id}')">Редактировать (новая версия)</button>`:""}</div>
+ ${m.scope==="public"?'<p class="footnote">Общие методики пользователи не изменяют.</p>':""}`;}
+function copyMethod(id){const m=clone(latest(id));const n={...m,id:"USR-COPY-"+(REG.length+1),version:1,parent:id+"@"+m.version,scope:"personal",validationStatus:"personal-unverified",author:"demo@example.com",createdAt:NOW,coagulantType:UI.selProf,note:"Персональная копия: "+m.note};REG.push(n);UI.selMethod=n.id;openEditor(n.id);}
+
+/* --- Редактор --- */
+function openEditor(id){UI.draft=clone(latest(id));UI.draftNote="";UI.tab="editor";location.hash="editor";render();}
+function draftErrors(d){const e=[];if(d.modelType==="manual")return e;
+ if(!d.outputBasis)e.push("Не задана база результата (outputBasis).");
+ d.inputVariables.forEach(v=>{if(!v.unit)e.push(`Переменная ${v.name}: нет единицы.`);if(!d.applicabilityLimits.find(l=>l.var===v.name&&isNum(l.min)&&isNum(l.max)))e.push(`Переменная ${v.name}: нет области применимости.`);});
+ if(d.modelType==="parameterizedExpression"){try{const ast=Expr.parse(d.expression);const known=new Set([...d.inputVariables.map(v=>v.name),...d.coefficients.map(c=>c.name)]);[...Expr.ids(ast)].forEach(x=>{if(!known.has(x))e.push(`В выражении неизвестное имя «${x}».`);});}catch(err){e.push("Выражение: "+err.message);}
+  d.coefficients.forEach(c=>{if(!isNum(c.value))e.push(`Коэффициент ${c.name}: нет значения.`);if(!c.unit)e.push(`Коэффициент ${c.name}: нет единицы.`);if(!c.basis)e.push(`Коэффициент ${c.name}: нет основания.`);});}
+ if(!d.source)e.push("Не указан источник / основание методики.");
+ return e;}
+function testResults(d){return (d.testCases||[]).map(t=>{try{if(d.modelType==="parameterizedExpression"){const vars={...t.inputs};d.coefficients.forEach(c=>vars[c.name]=c.value);const got=Expr.ev(Expr.parse(d.expression),vars);return {t,got,pass:Math.abs(got-t.expect)<=t.tol};}
+  const x=t.inputs[d.lookup.key];const r=d.lookup.rows.find(r=>x>=r.from&&x<r.to);return {t,got:r?`${f(r.low)}…${f(r.high)}`:"нет строки",pass:!!r&&r.low===t.expectLow&&r.high===t.expectHigh};}catch(e){return {t,got:"ошибка",pass:false};}});}
+V.editor=()=>{const d=UI.draft;if(!d)return `<h1>Редактор методики</h1><div class="msg info">Откройте личную методику на экране «Выбор методики» → «Редактировать». Общие методики открываются только для чтения; изменить можно персональную копию.</div><div class="btns"><button class="btn" type="button" onclick="openEditor('USR-PACL-DEMO')">Открыть USR-PACL-DEMO</button><button class="btn ghost" type="button" onclick="openEditor('USR-FECL3-DEMO')">Открыть USR-FECL3-DEMO (таблица)</button></div>`;
+ const errs=draftErrors(d),tests=testResults(d);const base=latest(d.id);
+ return `<div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;align-items:flex-end"><div><div class="eyebrow">Редактор · черновик версии ${base.version+1} на основе v${base.version}</div><h1>${d.id}</h1></div><div>${vpill(d.validationStatus)}</div></div>
+ <div class="msg demo small">Все значения в этой методике — ДЕМО, введены для показа механизма. Сохранение создаёт новую версию; существующие расчёты и отчёты не пересчитываются.</div>
+ <div class="grid2"><div class="stack"><div class="panel"><h2>Описание</h2><div class="fields">
+  ${ef("Тип коагулянта","coagulantType",d.coagulantType,{ro:1})}${ef("Продукты (productScope)","productScope",d.productScope)}${ef("Тип модели","modelType",d.modelType,{ro:1})}${ef("База результата","outputBasis",d.outputBasis,{hint:"мг/л …"})}</div>
+  <div class="fields" style="margin-top:12px">${ef("Источник / основание","source",d.source,{wide:1})}</div></div>
+  <div class="panel"><h2>Входные переменные и область применимости</h2><div class="tw"><table><thead><tr><th>Имя</th><th>Смысл</th><th>Единица</th><th class="n">min</th><th class="n">max</th></tr></thead><tbody>${d.inputVariables.map((v,i)=>{const L=d.applicabilityLimits.find(l=>l.var===v.name)||{};return `<tr><td class="mono">${v.name}</td><td>${esc(v.label)}</td><td><input aria-label="единица ${v.name}" style="width:110px" value="${esc(v.unit)}" oninput="UI.draft.inputVariables[${i}].unit=this.value;liveEditor()"></td><td class="n"><input aria-label="min ${v.name}" class="num" style="width:70px;text-align:right" value="${L.min??""}" oninput="setLim('${v.name}','min',this.value)"></td><td class="n"><input aria-label="max ${v.name}" class="num" style="width:70px;text-align:right" value="${L.max??""}" oninput="setLim('${v.name}','max',this.value)"></td></tr>`;}).join("")}</tbody></table></div></div>
+  ${d.modelType==="parameterizedExpression"?`<div class="panel"><h2>Выражение и коэффициенты</h2><div class="f"><label for="expr">Выражение (центральная оценка)</label><input id="expr" class="mono" value="${esc(d.expression)}" oninput="UI.draft.expression=this.value;liveEditor()"></div>
+   <div class="tw" style="margin-top:12px"><table><thead><tr><th>Коэф.</th><th class="n">Значение</th><th>Единица</th><th>Основание</th></tr></thead><tbody>${d.coefficients.map((c,i)=>`<tr><td class="mono">${c.name}</td><td class="n"><input aria-label="значение ${c.name}" class="num" style="width:80px;text-align:right" value="${c.value}" oninput="UI.draft.coefficients[${i}].value=num(this.value);liveEditor()"></td><td><input aria-label="единица ${c.name}" style="width:150px" value="${esc(c.unit)}" oninput="UI.draft.coefficients[${i}].unit=this.value;liveEditor()"></td><td><input aria-label="основание ${c.name}" style="width:120px" value="${esc(c.basis)}" oninput="UI.draft.coefficients[${i}].basis=this.value;liveEditor()"></td></tr>`).join("")}</tbody></table></div>
+   <p class="footnote">Правило диапазона: относительная полоса ${d.rangeRule.lower} / ${d.rangeRule.upper} вокруг центральной оценки.</p></div>`:
+  `<div class="panel"><h2>Таблица (ключ: ${d.lookup.key})</h2><div class="tw"><table><thead><tr><th class="n">от</th><th class="n">до</th><th class="n">низ, мг/л ${d.outputBasis}</th><th class="n">верх, мг/л ${d.outputBasis}</th></tr></thead><tbody>${d.lookup.rows.map((r,i)=>`<tr>${["from","to","low","high"].map(k=>`<td class="n"><input aria-label="${k} ${i}" class="num" style="width:70px;text-align:right" value="${r[k]}" oninput="UI.draft.lookup.rows[${i}].${k}=num(this.value);liveEditor()"></td>`).join("")}</tr>`).join("")}</tbody></table></div><p class="footnote">Центральная оценка: методика её не задаёт (правило «только границы»).</p></div>`}
+ </div><div class="stack"><div class="calc" data-live="edcheck">${edCheck()}</div></div></div>`;};
+function ef(l,k,v,o={}){return `<div class="f"${o.wide?' style="grid-column:1/-1"':""}><label for="ed-${k}">${l}</label><input id="ed-${k}" value="${esc(v)}" ${o.ro?"readonly":""} oninput="UI.draft.${k}=this.value;liveEditor()">${o.hint?`<div class="hint">${o.hint}</div>`:""}</div>`;}
+function setLim(v,k,x){let L=UI.draft.applicabilityLimits.find(l=>l.var===v);if(!L){L={var:v};UI.draft.applicabilityLimits.push(L);}L[k]=num(x);liveEditor();}
+const num=s=>{s=String(s).trim().replace(",",".");if(s==="")return null;const v=Number(s);return isFinite(v)?v:null;};
+function edCheck(){const d=UI.draft,errs=draftErrors(d),tests=testResults(d);
+ return `<h3>Проверка записи</h3>${errs.length?errs.map(e=>`<div class="msg bad small">${e}</div>`).join(""):'<div class="msg info small">Обязательные поля заполнены: единицы, область применимости, основание.</div>'}
+ <h3 style="margin-top:14px">Контрольные примеры (testCases)</h3><div class="tw"><table><thead><tr><th>Входы</th><th class="n">Ожидается</th><th class="n">Получено</th><th></th></tr></thead><tbody>${tests.map(r=>`<tr><td class="mono small">${Object.entries(r.t.inputs).map(([k,v])=>k+"="+v).join(", ")}</td><td class="n">${"expect" in r.t?f(r.t.expect):f(r.t.expectLow)+"…"+f(r.t.expectHigh)}</td><td class="n">${typeof r.got==="number"?f(r.got):r.got}</td><td>${r.pass?'<span class="ok">✓</span>':'<span class="fail">✗</span>'}</td></tr>`).join("")}</tbody></table></div>
+ <p class="footnote">Если контрольный пример не проходит после изменения коэффициента, нужно либо исправить коэффициент, либо осознанно обновить ожидаемое значение с основанием.</p>
+ <div class="f"><label for="chg">Комментарий к версии</label><input id="chg" value="${esc(UI.draftNote||"")}" oninput="UI.draftNote=this.value" placeholder="что и почему изменено"></div>
+ <div class="btns"><button class="btn" type="button" ${errs.length?"disabled":""} onclick="saveDraft()">Сохранить как v${latest(d.id).version+1}</button><button class="btn ghost" type="button" onclick="UI.draft=null;render()">Отменить</button></div>
+ ${tests.some(r=>!r.pass)?'<div class="msg warn small">Есть непройденные контрольные примеры: версию можно сохранить только как «личная, не верифицирована».</div>':""}`;}
+function liveEditor(){document.querySelectorAll('[data-live="edcheck"]').forEach(el=>el.innerHTML=edCheck());}
+function saveDraft(note){const d=clone(UI.draft);const prev=latest(d.id);d.version=prev.version+1;d.createdAt=NOW+" 20:"+String(10+d.version).padStart(2,"0");d.author="demo@example.com";d.changeNote=note||UI.draftNote||"Изменение параметров";
+ const tests=testResults(d);d.validationStatus=tests.length&&tests.every(r=>r.pass)?"personal-validated":"personal-unverified";
+ // при изменении коэффициента контрольные примеры не переписываются молча
+ REG.push(Object.freeze(d));UI.draft=null;toast(`Сохранена ${d.id} v${d.version}`);render();return d;}
+
+/* --- 3. Пример изменения коэффициента --- */
+V.change=()=>{const m1=byRef("USR-PACL-DEMO@1");const b1=m1.coefficients.find(c=>c.name==="b");const nb=UI.demoNew;
+ const vars1={color:35,turb:6};m1.coefficients.forEach(c=>vars1[c.name]=c.value);const vars2={...vars1,b:nb};
+ const D1=Expr.ev(Expr.parse(m1.expression),vars1),D2=Expr.ev(Expr.parse(m1.expression),vars2);const has2=!!byRef("USR-PACL-DEMO@2");
+ return `<h1>Пример изменения коэффициента</h1><p class="lead">Пользователь уточняет коэффициент цветности b в своей копии методики. Общая методика и сохранённый расчёт RC-0001 в.1 не меняются.</p>
+ <div class="grid2"><div class="panel"><h2>USR-PACL-DEMO · коэффициент b</h2><dl class="kv"><dt>Текущее значение (v1)</dt><dd>${f(b1.value)} ${b1.unit}</dd></dl>
+  <div class="fields" style="margin-top:12px"><div class="f"><label for="nb">Новое значение b</label><div class="row"><input id="nb" class="num" value="${nb}" oninput="UI.demoNew=num(this.value)??0;liveChange()" ${has2?"readonly":""}><span class="u">мг/л Al / град.</span></div><div class="hint">ДЕМО-значение</div></div></div>
+  <div data-live="chg">${chgBody(D1)}</div>
+  <div class="btns">${has2?'<span class="pill s-balance">v2 сохранена</span><a class="btn ghost" href="#compare">К сравнению →</a>':`<button class="btn" type="button" onclick="saveChange()">Сохранить как v2 и создать новую версию расчёта</button>`}</div></div>
+  <div class="panel"><h2>Что произойдёт</h2><ol class="small" style="padding-left:18px;display:grid;gap:6px;margin:0">
+   <li>Создаётся запись USR-PACL-DEMO v2; v1 остаётся неизменной.</li><li>Контрольный пример color=35, turb=6 перестаёт совпадать с ожидаемым 2,85 — версия получает статус «личная, не верифицирована», пока пример не обновлён с основанием.</li>
+   <li>Создаётся RC-0001 в.2 со снимком v2. Отчёт по в.1 остаётся как был.</li><li>Принятая пользователем доза не меняется автоматически: меняются диапазон и доза для подбора насоса.</li></ol></div></div>`;};
+function chgBody(D1){const nb=UI.demoNew;const v={color:35,turb:6,a:0.5,b:nb,c:0.1};const D2=Expr.ev(Expr.parse("a + b*color + c*turb"),v);
+ return `<div class="formula">v1: D = 0,5 + 0,05·35 + 0,1·6 = ${f(D1)} мг/л Al</div><div class="formula">v2: D = 0,5 + ${f(nb)}·35 + 0,1·6 = ${f(D2)} мг/л Al</div>
+ <p class="small">Центральная оценка: ${f(D1)} → <b>${f(D2)}</b> мг/л Al (${D2>=D1?"+":""}${f(D2-D1)}).</p>`;}
+function liveChange(){document.querySelectorAll('[data-live="chg"]').forEach(el=>el.innerHTML=chgBody(Expr.ev(Expr.parse("a + b*color + c*turb"),{a:0.5,b:0.05,c:0.1,color:35,turb:6})));}
+function saveChange(){UI.draft=clone(latest("USR-PACL-DEMO"));UI.draft.coefficients.find(c=>c.name==="b").value=UI.demoNew;UI.draft.coefficients.find(c=>c.name==="b").basis="ДЕМО: уточнено пользователем";
+ const d=saveDraft(`b: 0,05 → ${f(UI.demoNew)} (ДЕМО)`);makeCalc("RC-0001","PACl",d.id+"@"+d.version,UPACL,{note:"Новая версия после изменения b",created:NOW+" 20:"+String(30+CALCS.length)});
+ UI.cmpB="RC-0001@"+CALCS.filter(c=>c.id==="RC-0001").length;UI.tab="compare";location.hash="compare";render();}
+
+/* --- 4. До и после --- */
+const calcRef=r=>{const[id,v]=r.split("@");return CALCS.find(c=>c.id===id&&c.v===+v);};
+V.compare=()=>{const refs=CALCS.filter(c=>c.id==="RC-0001").map(c=>c.id+"@"+c.v);if(!UI.cmpB&&refs.length>1)UI.cmpB=refs[refs.length-1];
+ if(refs.length<2)return `<h1>Сравнение до и после</h1><div class="msg info">Пока есть только RC-0001 в.1. Измените коэффициент на экране 3 — появится в.2 для сравнения.</div><a class="btn" href="#change">Перейти к изменению коэффициента</a>`;
+ const a=calcRef(UI.cmpA),b=calcRef(UI.cmpB);const ra=a.result,rb=b.result;
+ const row=(l,x,y,u,good)=>{const d=y-x;const cls=Math.abs(d)<1e-9?"diff-eq":"";return `<tr><td>${l}</td><td class="n">${f(x)}</td><td class="n">${f(y)}</td><td class="n ${cls}">${Math.abs(d)<1e-9?"=":(d>0?"+":"")+f(d)}</td><td class="small muted">${u}</td></tr>`;};
+ return `<h1>Сравнение до и после</h1><p class="lead">Одинаковые исходные данные и паспорт; различается только версия методики.</p>
+ <div class="panel" style="margin-bottom:16px;display:flex;flex-wrap:wrap;gap:16px;align-items:center"><span class="small">До:</span><b class="mono">${UI.cmpA} · ${a.methodRef}</b><span class="small">После:</span><select id="cmpB" onchange="UI.cmpB=this.value;render()">${refs.filter(r=>r!==UI.cmpA).map(r=>`<option${r===UI.cmpB?" selected":""}>${r}</option>`).join("")}</select><b class="mono">${b.methodRef}</b></div>
+ <div class="grid2"><div class="panel tw"><table><thead><tr><th>Показатель</th><th class="n">До</th><th class="n">После</th><th class="n">Δ</th><th>Ед.</th></tr></thead><tbody>
+ ${row("Предварительный диапазон: низ",ra.dose.low,rb.dose.low,"мг/л Al")}${row("Предварительный диапазон: верх",ra.dose.high,rb.dose.high,"мг/л Al")}${row("Центральная оценка",ra.dose.central,rb.dose.central,"мг/л Al")}${row("Доза, принятая пользователем",ra.dose.accepted,rb.dose.accepted,"мг/л Al")}${row("Доза для макс. подачи насоса",ra.dose.pump,rb.dose.pump,"мг/л Al")}
+ ${row("Товарный ПОХА при Qном",ra.prod.Mp,rb.prod.Mp,"кг/ч")}${row("Насос: qmin",ra.eq.qmin,rb.eq.qmin,"л/ч")}${row("Насос: qmax",ra.eq.qmax,rb.eq.qmax,"л/ч")}${row("Кратность регулирования",ra.eq.qmax/ra.eq.qmin,rb.eq.qmax/rb.eq.qmin,"1:x")}${row("Расход щёлочности при дозе насоса",ra.ab.cmax,rb.ab.cmax,"мг-экв/л")}</tbody></table></div>
+ <div class="panel"><h2>Вывод</h2><ul class="small" style="padding-left:18px;display:grid;gap:6px;margin:0"><li>Принятая доза ${f(rb.dose.accepted)} мг/л Al не изменилась — её меняет только пользователь.</li><li>Расход товарного продукта при Qном не изменился, так как он считается по принятой дозе.</li><li>Диапазон сузился вместе с центральной оценкой; доза подбора насоса снизилась с ${f(ra.dose.pump)} до ${f(rb.dose.pump)} мг/л Al, верх подачи насоса — с ${f(ra.eq.qmax)} до ${f(rb.eq.qmax)} л/ч.</li><li>Статус методики v2: ${VSTAT[b.method.validationStatus][1].toLowerCase()}.</li></ul>
+ <div class="msg warn small">Сравнение показывает влияние коэффициента на расход и оборудование. Оно не говорит, какая версия ближе к реальной оптимальной дозе.</div></div></div>`;};
+
+/* --- 5. История --- */
+V.history=()=>{const ms=REG.filter(m=>m.scope==="personal"||m.id.startsWith("USR")).sort((a,b)=>a.id.localeCompare(b.id)||a.version-b.version);
+ return `<h1>История версий</h1><p class="lead">Методики и расчёты — неизменяемые записи. Новая версия появляется только при явном сохранении.</p>
+ <div class="panel" style="margin-bottom:20px"><h2>Методики (личные)</h2><div class="tw"><table><thead><tr><th>Методика</th><th class="n">Версия</th><th>Создана</th><th>Автор</th><th>Изменение</th><th>Основа</th><th>Статус</th></tr></thead><tbody>${ms.map(m=>`<tr><td class="mono">${m.id}</td><td class="n">v${m.version}</td><td class="mono small">${m.createdAt}</td><td class="small">${esc(m.author)}</td><td class="small">${esc(m.changeNote||m.note)}</td><td class="mono small">${m.version>1?"v"+(m.version-1):m.parent||"—"}</td><td>${vpill(m.validationStatus)}</td></tr>`).join("")}</tbody></table></div></div>
+ <div class="panel"><h2>Расчёты</h2><div class="tw"><table><thead><tr><th>Расчёт</th><th>Создан</th><th>Методика (снимок)</th><th class="n">Принятая доза</th><th class="n">Насос, л/ч</th><th>Статус</th><th>Отчёт</th></tr></thead><tbody>${CALCS.map(c=>{const newer=c.method.modelType!=="manual"&&latest(c.method.id).version>c.method.version;return `<tr><td class="mono">${c.id} в.${c.v}</td><td class="mono small">${c.created}</td><td class="mono small">${c.methodRef}</td><td class="n">${f(c.result.dose.accepted)}</td><td class="n">${f(c.result.eq?.qmin)}–${f(c.result.eq?.qmax)}</td><td>${spill(c.result.status)}</td><td class="small">${newer?'<span class="pill s-clarify">есть новая версия методики</span> отчёт не пересчитан':"актуален для своей версии"}</td></tr>`;}).join("")}</tbody></table></div>
+ <p class="footnote">Автоматический пересчёт старых отчётов не выполняется. Чтобы применить новую версию методики, создайте новую версию расчёта.</p>
+ <div class="btns"><button class="btn ghost" type="button" onclick="recalcLatest()">Создать новую версию RC-0001 на последней версии методики</button></div></div>`;};
+function recalcLatest(){const m=latest("USR-PACL-DEMO");makeCalc("RC-0001","PACl",m.id+"@"+m.version,UPACL,{note:"Пересчёт по запросу",created:NOW+" 20:"+String(40+CALCS.length)});toast("Создана новая версия RC-0001");render();}
+
+/* --- 6. Протокол --- */
+const ORIG={snapshot:["s-user","снимок"],input:["s-user","исходные данные"],user:["s-user","задано пользователем"],prelim:["s-prelim","предварительная оценка"],balance:["s-balance","материальный баланс"],rule:["s-balance","правило"],assume:["s-clarify","допущение"],warn:["s-clarify","предупреждение"],ok:["s-balance","проверка ✓"],bad:["s-nodata","не выполнено"],nodata:["s-nodata","нет данных"],none:["s-user","не задаётся"],note:["s-clarify","ограничение"],ox:["s-clarify","статус окисления"]};
+V.protocol=()=>{const refs=CALCS.map(c=>c.id+"@"+c.v);const c=calcRef(UI.protoCalc)||CALCS[0];const r=c.result;const d=r.dose;
+ return `<div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;align-items:flex-end"><div><div class="eyebrow">Протокол расчёта · ${c.id} в.${c.v} · ${c.created}</div><h1>Пошаговый протокол</h1></div><div style="display:flex;gap:10px;align-items:center"><select id="pc" aria-label="Расчёт" onchange="UI.protoCalc=this.value;render()">${refs.map(x=>`<option${x===UI.protoCalc?" selected":""}>${x}</option>`).join("")}</select>${spill(r.status)}</div></div>
+ <p class="lead">Каждая строка: что вычислено, подстановка чисел, результат и происхождение. Протокол формируется ядром и сохраняется в версии расчёта вместе со снимком методики.</p>
+ ${d&&isNum(d.accepted)?`<div class="dosegrid" style="margin-bottom:18px"><div class="dose"><div class="l">Предварительный диапазон</div><div class="v">${c.method.modelType==="manual"?"—":f(d.low)+"…"+f(d.high)}</div><div class="l">${c.method.modelType==="manual"?"методика не применялась":"мг/л "+c.method.outputBasis}</div></div><div class="dose"><div class="l">Центральная оценка</div><div class="v">${f(d.central)}</div><div class="l">${isNum(d.central)?"мг/л "+c.method.outputBasis:"методика не задаёт"}</div></div><div class="dose acc"><div class="l">Доза, принятая пользователем</div><div class="v">${f(d.accepted)}</div><div class="l">мг/л ${c.method.modelType==="manual"?c.user.basisLabel:c.method.outputBasis}</div></div><div class="dose"><div class="l">Доза для макс. подачи насоса</div><div class="v">${f(d.pump)}</div><div class="l">мг/л · ${isNum(c.user.pumpOverride)?"задана пользователем":"по правилу"}</div></div></div>`:""}
+ <div class="trace">${r.tr.map(s=>`<section class="tstage"><header><b>${typeof s.stage==="number"?(s.stage===0?"ВХОД":"ЭТАП "+s.stage):s.stage==="Q"?"КАЧЕСТВО":"FeSO₄"}</b><h3>${s.title}</h3></header>${s.rows.map(x=>`<div class="trow"><div>${x[0]}</div><div class="sub">${x[1]}</div><div class="res">${x[2]}</div><div>${ORIG[x[3]]?pill(ORIG[x[3]][0],ORIG[x[3]][1]):""}</div></div>`).join("")}</section>`).join("")}</div>
+ <div class="grid2" style="margin-top:18px"><div class="panel"><h2>Предупреждения</h2>${r.W.map(w=>`<div class="msg ${w[0]} small">${w[1]}</div>`).join("")}</div><div class="panel"><h2>Допущения (снимок)</h2><ul class="small" style="padding-left:18px;margin:0">${c.assumptions.map(a=>`<li>${a}</li>`).join("")}</ul><p class="footnote">Методика: ${c.methodRef}${c.method.coefficients.length?" · коэффициенты: "+c.method.coefficients.map(k=>k.name+"="+f(k.value)).join(", "):""}</p></div></div>`;};
+
+/* --- 7. Требуют подтверждения --- */
+V.sources=()=>`<h1>Методики, требующие подтверждения источниками</h1><p class="lead">До получения источника каждая из них либо отсутствует в общем реестре, либо существует только как шаблон без коэффициентов. Ручная доза и материальные балансы работают без них.</p>
+<div class="panel tw"><table><thead><tr><th>Код</th><th>Методика</th><th>Профиль</th><th>Тип модели</th><th>Что нужно</th><th>Без неё в v1</th></tr></thead><tbody>
+${[["M-14","Предварительный диапазон доз","PACl","expression / lookup","Источник, входы (напр. цветность, ПО, мутность, T), единицы, область, контрольные примеры","Ручная доза; оценка — «недостаточно данных»"],
+["M-15a","Предварительный диапазон доз","FeCl₃","expression / lookup","То же; перенос зависимости для Al запрещён","То же"],
+["M-15b","Предварительный диапазон доз","Fe₂(SO₄)₃","expression / lookup","То же","То же"],
+["M-16","Предварительный диапазон доз","Al₂(SO₄)₃","expression / lookup","То же; связь с базой гидрата","То же"],
+["M-16b","Предварительный диапазон доз","FeSO₄","expression / lookup","То же + условия окисления","То же"],
+["M-17","Завершённость окисления Fe²⁺ за контактное время","FeSO₄","lookup / протокол испытаний","Проверенная кинетическая зависимость или результаты испытаний (pH, T, O₂/окислитель, t)","Статус «требуется проверка»; стехиометрия O₂ показывается, но не подтверждает окисление"],
+["M-08","Доза кислоты/щёлочи до целевого pH","HCl, H₂SO₄, NaOH","lookup (титрование)","Экспериментальная титрационная кривая воды объекта или проверенная равновесная модель","Ручная доза 100 % вещества"],
+["M-06+","Учёт свободной кислотности и основности в балансе","PACl и др.","parameterizedExpression","Определение основности производителя, единицы свободной кислотности","Баланс без свободной кислотности, с пометкой"],
+["M-09","Контактное время","все","параметр с основанием","Источник или опыт объекта / пилотные испытания","Время задаёт пользователь; объём не называется достаточным"],
+["M-10","Коэффициент использования объёма k","все","параметр с основанием","Источник или гидродинамика камеры","k не применяется"],
+["M-11v","Расчётная скорость в трубопроводе","все","параметр с основанием","Норматив или практика заказчика","Скорость задаёт пользователь"],
+["M-12z","Проектный запас подачи насоса","все","параметр с основанием","Стандарт заказчика","Запас задаёт пользователь"],
+["M-18","Прогноз SDI15, остаточного металла, ПО ультрафильтрата","все","—","Проверенная модель или пилотные данные","Только заданные требования: «достижение не подтверждено»"],
+["M-19","Нагрузка на УФ по ВВ и осадку","все","—","Модель осадка без двойного учёта, эксперимент","Только модель данных"]].map(r=>`<tr><td class="mono">${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td class="small">${r[3]}</td><td class="small">${r[4]}</td><td class="small">${r[5]}</td></tr>`).join("")}</tbody></table></div>`;
+
+/* роутинг */
+function render(){const tabs=`<nav class="tabs" aria-label="Разделы">${TABS.map(([k,n,l])=>`<a href="#${k}"${k===UI.tab?' aria-current="page"':""}><span class="n">${n}</span>${l}</a>`).join("")}</nav>`;
+ document.getElementById("main").innerHTML=tabs+(V[UI.tab]||V.arch)();}
+function route(){const h=location.hash.slice(1);UI.tab=V[h]?h:"arch";render();window.scrollTo(0,0);}
+function toast(m){let el=document.getElementById("toast");if(!el){el=document.createElement("div");el.id="toast";el.setAttribute("role","status");el.style.cssText="position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--sheet);padding:8px 14px;border-radius:4px;font-size:13px;z-index:9";document.body.appendChild(el);}el.textContent=m;el.hidden=false;clearTimeout(el._t);el._t=setTimeout(()=>el.hidden=true,2400);}
+window.addEventListener("hashchange",route);route();
+</script>

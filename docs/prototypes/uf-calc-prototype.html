@@ -1,0 +1,783 @@
+<title>UF Calc прототип</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: engineering workbench — fixed left rail (screen map), working sheet on the right; outputs sit beside inputs as "calc sheets". */
+:root{
+  --bg:#f3f5f6; --sheet:#ffffff; --ink:#18232b; --ink2:#4d5d68; --line:#d5dde2; --soft:#e9eef1;
+  --accent:#0b6e8a; --accent-soft:#dcedf2;
+  --good:#2f7d4f; --good-soft:#e1f1e7; --warn:#a4620a; --warn-soft:#fbefd9; --bad:#b23b2e; --bad-soft:#f8e2df;
+  --demo:#6b4fa3; --demo-soft:#ece6f6;
+  --f-display:"IBM Plex Sans Condensed","Noto Sans SC","Arial Narrow",sans-serif;
+  --f-body:"IBM Plex Sans","Noto Sans SC",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1519; --sheet:#162026; --ink:#e3eaee; --ink2:#9fb0ba; --line:#2b3a43; --soft:#1d2a31;
+  --accent:#4fb3d0; --accent-soft:#16323c; --good:#6cc08f; --good-soft:#173226; --warn:#e2a54c; --warn-soft:#3a2b14;
+  --bad:#ec8275; --bad-soft:#3b1d19; --demo:#b59ae6; --demo-soft:#2a2240; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1519; --sheet:#162026; --ink:#e3eaee; --ink2:#9fb0ba; --line:#2b3a43; --soft:#1d2a31;
+  --accent:#4fb3d0; --accent-soft:#16323c; --good:#6cc08f; --good-soft:#173226; --warn:#e2a54c; --warn-soft:#3a2b14;
+  --bad:#ec8275; --bad-soft:#3b1d19; --demo:#b59ae6; --demo-soft:#2a2240; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.5}
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--sheet);border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;padding:10px 16px}
+.brand{font-family:var(--f-display);font-weight:600;font-size:17px;letter-spacing:.01em}
+.brand small{font-family:var(--f-mono);font-weight:400;font-size:11px;color:var(--ink2);margin-left:6px}
+.demo-flag{font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;background:var(--demo-soft);color:var(--demo);border:1px solid var(--demo);padding:2px 8px;border-radius:3px}
+.spacer{flex:1}
+.lang{display:flex;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.lang button{border:0;background:transparent;color:var(--ink2);padding:4px 10px;font:500 12px var(--f-mono);cursor:pointer}
+.lang button[aria-pressed="true"]{background:var(--accent);color:#fff}
+.wrap{display:grid;grid-template-columns:240px minmax(0,1fr);min-height:calc(100% - 52px)}
+nav.rail{border-right:1px solid var(--line);padding:16px 0;background:var(--sheet)}
+.rail h4{font:600 11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink2);margin:14px 16px 4px}
+.rail a{display:flex;gap:8px;align-items:baseline;padding:5px 16px;color:var(--ink);text-decoration:none;font-size:13px;border-left:3px solid transparent}
+.rail a .n{font:400 11px var(--f-mono);color:var(--ink2);width:18px;flex:none}
+.rail a:hover{background:var(--soft)}
+.rail a[aria-current="page"]{border-left-color:var(--accent);background:var(--accent-soft);font-weight:500}
+main{padding-block:24px 64px;padding-inline:clamp(16px,3vw,40px);min-width:0}
+h1{font-family:var(--f-display);font-weight:600;font-size:26px;line-height:1.2;margin:0 0 4px;text-wrap:balance}
+h2{font-family:var(--f-display);font-weight:600;font-size:19px;margin:0 0 10px}
+h3{font-size:14px;font-weight:600;margin:0 0 8px}
+.lead{color:var(--ink2);max-width:72ch;margin:0 0 20px}
+.eyebrow{font:500 11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:6px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:20px;align-items:start}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:16px}
+.panel{background:var(--sheet);border:1px solid var(--line);border-radius:6px;padding:18px;min-width:0}
+.panel + .panel{margin-top:0}
+.stack{display:flex;flex-direction:column;gap:20px}
+.calc{background:var(--soft);border:1px solid var(--line);border-radius:6px;padding:16px;min-width:0}
+.calc h3{font-family:var(--f-mono);font-weight:500;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2)}
+.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:12px 16px}
+.f label{display:block;font-size:12px;color:var(--ink2);margin-bottom:3px}
+.f label .req{color:var(--bad)}
+.f .row{display:flex;gap:6px;align-items:center}
+.f input,.f select,.f textarea{width:100%;min-width:0;font:400 14px var(--f-body);padding:6px 8px;border:1px solid var(--line);border-radius:4px;background:var(--sheet);color:var(--ink)}
+.f input[type=number],.f input.num{font-family:var(--f-mono);text-align:right}
+.f .u{font:400 12px var(--f-mono);color:var(--ink2);white-space:nowrap;min-width:46px}
+.f .hint{font-size:11.5px;color:var(--ink2);margin-top:3px}
+.f.missing input{border-color:var(--warn);background:var(--warn-soft)}
+input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+details{border-top:1px dashed var(--line);margin-top:14px;padding-top:10px}
+summary{cursor:pointer;font-weight:500;font-size:13px;color:var(--accent)}
+.btn{font:500 13px var(--f-body);border:1px solid var(--accent);background:var(--accent);color:#fff;padding:7px 14px;border-radius:4px;cursor:pointer;text-decoration:none;display:inline-block}
+.btn.ghost{background:transparent;color:var(--accent)}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.seg label{padding:6px 12px;cursor:pointer;font-size:13px;border-right:1px solid var(--line)}
+.seg label:last-child{border-right:0}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label:has(input:checked){background:var(--accent);color:#fff}
+.seg label:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:-2px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+.tw{overflow-x:auto;max-width:100%}
+th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+th{font-weight:500;font-size:12px;color:var(--ink2);background:var(--soft)}
+td.n,th.n{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.basis{font:400 11px var(--f-mono);color:var(--accent);background:var(--accent-soft);padding:1px 5px;border-radius:3px;white-space:nowrap}
+.pill{display:inline-flex;align-items:center;gap:5px;font:500 11.5px var(--f-body);padding:2px 8px;border-radius:999px;white-space:nowrap;border:1px solid}
+.pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.s-user{color:var(--accent);background:var(--accent-soft);border-color:var(--accent)}
+.s-balance{color:var(--good);background:var(--good-soft);border-color:var(--good)}
+.s-prelim{color:var(--demo);background:var(--demo-soft);border-color:var(--demo)}
+.s-clarify{color:var(--warn);background:var(--warn-soft);border-color:var(--warn)}
+.s-incomplete,.s-nodata{color:var(--bad);background:var(--bad-soft);border-color:var(--bad)}
+.msg{border-left:3px solid;padding:8px 12px;border-radius:0 4px 4px 0;font-size:13px;margin:8px 0}
+.msg.warn{border-color:var(--warn);background:var(--warn-soft)}
+.msg.bad{border-color:var(--bad);background:var(--bad-soft)}
+.msg.info{border-color:var(--accent);background:var(--accent-soft)}
+.msg.demo{border-color:var(--demo);background:var(--demo-soft)}
+.msg b{font-weight:600}
+.stub{background:repeating-linear-gradient(135deg,var(--demo-soft) 0 8px,transparent 8px 16px);border:1px dashed var(--demo);border-radius:6px;padding:14px}
+.kv{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 16px;font-size:13px}
+.kv dt{color:var(--ink2)} .kv dd{margin:0;font-family:var(--f-mono);text-align:right;font-variant-numeric:tabular-nums}
+.steps{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 20px;padding:0;list-style:none}
+.steps a{display:flex;gap:6px;align-items:center;text-decoration:none;color:var(--ink2);font-size:12.5px;border:1px solid var(--line);border-radius:4px;padding:4px 10px;background:var(--sheet)}
+.steps a[aria-current="step"]{border-color:var(--accent);color:var(--ink);background:var(--accent-soft)}
+.steps .dot{width:8px;height:8px;border-radius:50%;background:var(--line)}
+.steps .ok{background:var(--good)} .steps .wn{background:var(--warn)} .steps .er{background:var(--bad)}
+.formula{font-family:var(--f-mono);font-size:12.5px;background:var(--sheet);border:1px solid var(--line);border-radius:4px;padding:6px 10px;margin:6px 0;overflow-x:auto;white-space:nowrap}
+.tool-card{display:flex;flex-direction:column;gap:6px}
+.tool-card .st{font:500 11px var(--f-mono);letter-spacing:.06em;text-transform:uppercase}
+.hero{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:28px;align-items:center;margin-bottom:28px}
+.hero h1{font-size:clamp(26px,3.6vw,38px)}
+.svgbox{overflow-x:auto;background:var(--sheet);border:1px solid var(--line);border-radius:6px;padding:8px}
+.svgbox svg{display:block;min-width:900px;width:100%;height:auto}
+.svgbox.small svg{min-width:640px}
+.tkp{background:var(--sheet);border:1px solid var(--line);border-radius:6px;padding:28px;max-width:1000px}
+.tkp-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;border-bottom:2px solid var(--ink);padding-bottom:12px;margin-bottom:18px}
+.figs{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr));gap:12px;margin:16px 0}
+.fig{border:1px solid var(--line);border-radius:4px;padding:10px 12px}
+.fig .v{font:500 20px var(--f-mono);font-variant-numeric:tabular-nums}
+.fig .l{font-size:12px;color:var(--ink2)}
+.note-doc{max-width:78ch}
+.note-doc h3{font-family:var(--f-display);font-size:16px;margin:22px 0 6px}
+.note-doc p{margin:0 0 8px}
+.tree{list-style:none;padding-left:0;margin:0;font-size:13px}
+.tree ul{list-style:none;padding-left:20px;border-left:1px dashed var(--line);margin:4px 0 4px 6px}
+.tree li{padding:3px 0}
+.tag{font:500 12px var(--f-mono)}
+.muted{color:var(--ink2)}
+.mono{font-family:var(--f-mono)}
+.small{font-size:12px}
+.footnote{font-size:12px;color:var(--ink2);margin-top:12px}
+@media (max-width:820px){.wrap{grid-template-columns:1fr} nav.rail{border-right:0;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:2px;padding:8px 8px} .rail h4{width:100%;margin:6px 8px 2px} .rail a{border-left:0;border-radius:4px;padding:4px 8px} .hero{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+<style>
+.top{--chem:#c2417a;--bw:#7356b5}
+:root{--chem:#c2417a;--bw:#7356b5}
+.grp{font:600 11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink2);margin:14px 16px 4px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:14px}
+.kcard{background:var(--sheet);border:1px solid var(--line);border-radius:6px;padding:16px}
+.kcard .k{font:600 11px var(--f-mono);letter-spacing:.08em;color:var(--accent)}
+.kcard .v{font:500 30px var(--f-mono);font-variant-numeric:tabular-nums;margin:4px 0 2px}
+.kcard .u{font:400 12px var(--f-mono);color:var(--ink2)}
+.kcard .d{font-size:12px;color:var(--ink2);margin-top:6px}
+.st-table input{width:76px;font:400 12.5px var(--f-mono);text-align:right;padding:3px 5px;border:1px solid var(--line);border-radius:3px;background:var(--sheet);color:var(--ink)}
+.st-table select{font-size:12px;padding:2px 4px;border:1px solid var(--line);border-radius:3px;background:var(--sheet);color:var(--ink)}
+.st-table td,.st-table th{padding:4px 6px;font-size:12.5px}
+.chg{background:var(--warn-soft)}
+.tagp{font:500 10.5px var(--f-mono);color:var(--demo);border:1px dashed var(--demo);border-radius:3px;padding:1px 5px;white-space:nowrap}
+.busy{position:fixed;inset:0;background:rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;z-index:20}
+.busy div{background:var(--sheet);color:var(--ink);padding:16px 22px;border-radius:6px;font-weight:500}
+.statusrow{display:flex;flex-wrap:wrap;gap:8px}
+.flowcard{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;font-size:13px}
+.ganttwrap{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--sheet)}
+.ganttwrap svg{display:block;min-width:900px;width:100%;height:auto}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--ink2);margin-top:8px}
+.legend i{display:inline-block;width:14px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.rowbtn{border:1px solid var(--line);background:var(--sheet);color:var(--ink);border-radius:3px;padding:1px 6px;cursor:pointer;font-size:12px}
+.lock{opacity:.6}
+</style>
+
+<header class="top">
+  <div class="brand">UF Depot <small>· UF Calc</small></div>
+  <span class="demo-flag">ПРОТОТИП · ДЕМО-ДАННЫЕ</span>
+  <span class="pill s-clarify" title="Расчёт без регистрации — временный черновик">Черновик без регистрации</span>
+  <div class="spacer"></div>
+  <span id="calcstate" class="small"></span>
+  <button class="btn" type="button" onclick="recalc()">Рассчитать</button>
+</header>
+<div class="wrap">
+  <nav class="rail" id="rail" aria-label="Экраны UF Calc"></nav>
+  <main id="main"></main>
+</div>
+
+<script>
+"use strict";
+/* =====================================================================
+   UF CALC ENGINE — детерминированное событийное ядро.
+   Не зависит от UI. Единицы: время — с, расход — м³/ч, объём — м³,
+   доза — мг/л (= г/м³) действующего вещества, масса — кг.
+   ===================================================================== */
+const UFE=(()=>{
+"use strict";
+const ENGINE="uf-core 0.1-proto";
+const DAY=86400;
+const isNum=v=>typeof v==="number"&&isFinite(v);
+
+/* ---------- U-01: объём линейного участка и его части ---------- */
+// полный объём: V = (q0+q1)/2 × t/3600
+const vol=(q0,q1,t)=>(q0+q1)/2*t/3600;
+// часть [a,b] (с от начала стадии длительностью t)
+function volPart(q0,q1,t,a,b){if(b<=a)return 0;if(t<=0)return 0;const k=(q1-q0)/t;return (q0*(b-a)+k*(b*b-a*a)/2)/3600;}
+const qAt=(q0,q1,t,a)=>t>0?q0+(q1-q0)*a/t:q0;
+
+/* ---------- U-02: дозирование ---------- */
+function dosing(D,Q,w,rho,C){const Ma=D*Q/1000,Mc=Ma/w;return {Ma,Mc,Lc:Mc/rho,Lw:isNum(C)?D*Q/C:NaN};}
+
+/* ---------- U-03: баланс ОО ---------- */
+function roBalance(V1,V2,e1,e2){const F2=V2/e2,R2=F2-V2,P1=V1+F2,F1=P1/e1,UF=F1-R2,C1=F1-P1;return {F2,R2,P1,F1,UF,C1,check:UF-(V1+V2+C1)};}
+const kP1=e1=>1/e1, kP2=(e1,e2)=>1/(e1*e2)-(1-e2)/e2;
+
+/* ---------- разрешение расходов стадий ----------
+   flow: {u:"lmh",v0,v1} | {u:"m3h",v0,v1} | {u:"filt"} (связь с расходом фильтрации) | {u:"ff"} */
+function resolveStage(s,ctx){const r={...s};const f=s.flow||{u:"m3h",v0:0,v1:0};
+ const conv=v=>f.u==="lmh"?v*ctx.A_unit/1000:v;
+ if(f.u==="filt"){r.q0=f.from0?0:ctx.Qf;r.q1=f.to0?0:ctx.Qf;}
+ else if(f.u==="ff"){r.q0=f.from0?0:ctx.Qff;r.q1=f.to0?0:ctx.Qff;}
+ else {r.q0=conv(f.v0);r.q1=conv(f.v1);}
+ return r;}
+
+/* ---------- профиль одной программы ---------- */
+function progVolumes(stages){const o={t:0};for(const s of stages){o.t+=s.t;const v=vol(s.q0,s.q1,s.t);const k="from_"+s.from;o[k]=(o[k]||0)+v;if(s.produces)o.uf=(o.uf||0)+v;}return o;}
+
+/* =====================================================================
+   Событийное моделирование N установок
+   ===================================================================== */
+function simulate(P){
+ const ctx={A_unit:P.A_unit,Qf:P.J*P.A_unit/1000};ctx.Qff=P.ffLinked?ctx.Qf:P.Qff;
+ const R=st=>st.map(s=>resolveStage(s,ctx));
+ const T={FR:R(P.rec.filtRamp),FS:R(P.rec.filtStop),PRE:R(P.rec.preService),RS:R(P.rec.restart),BW:R(P.rec.bw)};
+ const CEB={};for(const k in P.rec.ceb)CEB[k]=R(P.rec.ceb[k].stages);
+ const tF=P.rec.tFilt;
+ const SC=P.supercycle;const scLen=SC.reduce((a,r)=>a+r.n,0);
+ const totalDays=P.warmupDays+P.days;const tEnd=totalDays*DAY;
+ const days=[];for(let d=0;d<totalDays;d++)days.push(newDay());
+ function newDay(){return {raw:0,rawFilt:0,uf:0,ff:0,src:{UF:0,RO1:0,RO2:0},drain:{},chem:{},bw:0,ceb:{},cycles:0,wait:0,ext:0,stops:0,pieces:[]};}
+ const detail=P.detailDay!=null?P.warmupDays+P.detailDay:-1;const DET=[];
+ const groupOf=[];P.groups.forEach((g,gi)=>g.forEach(i=>groupOf[i]=gi));
+ const dosingMax={};// группа → реагент → max подачи действующего вещества кг/ч
+ const LOG=[];
+ /* интеграция отрезка стадии [a,b] (с от начала стадии), начатой в момент t0 */
+ function emit(tr,t0,s,a,b,tag){if(b<=a)return;let x=a;
+  while(x<b-1e-9){const abs=t0+x;const d=Math.floor(abs/DAY+1e-12);if(d>=totalDays)break;const dEnd=(d+1)*DAY;const y=Math.min(b,dEnd-t0);
+   const v=volPart(s.q0,s.q1,s.t||(b-a),x,y);const D=days[d];
+   if(s.from==="raw"){D.raw+=v;if(s.produces)D.rawFilt+=v;}
+   if(s.produces)D.uf+=v;
+   if(s.from==="UF"||s.from==="RO1"||s.from==="RO2")D.src[s.from]+=v;
+   if(s.to&&s.to!=="UF")D.drain[s.to]=(D.drain[s.to]||0)+v;
+   if(s.kind==="FF")D.ff+=v;
+   if(s.kind==="BW")D.bw+=v;
+   if(s.dose)for(const r in s.dose){const kg=v*s.dose[r]/1000;const key=groupOf[tr]+"|"+r;D.chem[key]=(D.chem[key]||0)+kg;
+     const qmax=Math.max(qAt(s.q0,s.q1,s.t,x),qAt(s.q0,s.q1,s.t,y));const rate=s.dose[r]*qmax/1000;(dosingMax[groupOf[tr]]??={});dosingMax[groupOf[tr]][r]=Math.max(dosingMax[groupOf[tr]][r]||0,rate);}
+   if(tag==="ext")D.ext+=y-x;if(tag==="wait")D.wait+=y-x;
+   const q0=qAt(s.q0,s.q1,s.t||(b-a),x),q1=qAt(s.q0,s.q1,s.t||(b-a),y);
+   if(s.from==="raw")D.pieces.push(["F",-1,t0+x,t0+y,q0,q1]);
+   if(s.station==="bw")D.pieces.push(["B",groupOf[tr],t0+x,t0+y,q0,q1]);
+   if(d===detail)DET.push({tr,t0:t0+x-d*DAY,t1:t0+y-d*DAY,name:s.name,kind:s.kind,tag,q0,q1,from:s.from,to:s.to,ceb:s.ceb||null});
+   x=y;}}
+ /* проигрывание списка стадий подряд; возвращает время окончания */
+ function play(tr,t,list,tag){for(const s of list){emit(tr,t,s,0,s.t,tag);t+=s.t;}return t;}
+ const filt={name:"Фильтрация",kind:"F",from:"raw",to:"UF",produces:true,q0:ctx.Qf,q1:ctx.Qf,t:0};
+ const waitS={name:"Ожидание",kind:"W",from:"none",to:null,q0:0,q1:0,t:0};
+ /* состояние установок */
+ const trains=[];
+ for(let i=0;i<P.N;i++){const pos=(P.startPos&&isNum(P.startPos[i]))?P.startPos[i]:Math.floor(i*scLen/P.N);
+  let row=0,c=pos%scLen;while(c>=SC[row].n){c-=SC[row].n;row++;}
+  const ph=(P.phase&&isNum(P.phase[i]))?P.phase[i]:0;
+  trains.push({i,row,cDone:c,state:"F",filtStart:-ph,reqTime:null,stopEnd:null,token:0});}
+ /* очередь событий */
+ const EV=[];const ORDER={END:0,REQ:1,STOPEND:2,EXT:3};
+ function push(t,type,tr,token){EV.push({t,type,tr,token});}
+ function popMin(){let bi=0;for(let k=1;k<EV.length;k++){const a=EV[k],b=EV[bi];if(a.t<b.t-1e-9||(Math.abs(a.t-b.t)<=1e-9&&(ORDER[a.type]<ORDER[b.type]||(ORDER[a.type]===ORDER[b.type]&&a.tr<b.tr))))bi=k;}return EV.splice(bi,1)[0];}
+ const busy=P.groups.map(()=>false);const queue=P.groups.map(()=>[]);
+ trains.forEach(tr=>push(tr.filtStart+tF,"REQ",tr.i,0));
+ function serviceList(tr){const row=SC[tr.row];const willCeb=tr.cDone+1>=row.n;let L=[...T.PRE,...T.BW];if(willCeb&&row.ceb&&CEB[row.ceb])L=L.concat(CEB[row.ceb].map(s=>({...s,ceb:row.ceb})));return {L,willCeb,ceb:willCeb?row.ceb:null};}
+ function grant(gi,t){const tr=trains[queue[gi].shift()];busy[gi]=true;tr.token++;
+  let start=t,pre=[];
+  if(tr.state==="F"){emitFilt(tr,t);}
+  else if(tr.state==="STOP"){start=Math.max(t,tr.stopEnd);pre=T.RS;}
+  else if(tr.state==="WAIT"){emit(tr.i,tr.stopEnd,waitS,0,t-tr.stopEnd,"wait");pre=T.RS;}
+  const sv=serviceList(tr);let te=play(tr.i,start,pre,"");
+  const svcList=pre.length?sv.L.filter(s=>!(s.kind==="FX")):sv.L;// после останова переход фильтрация→FF не нужен
+  te=play(tr.i,te,svcList,"");
+  if(t>=P.warmupDays*DAY&&LOG.length<400)LOG.push({t,tr:tr.i,ev:"Обслуживание",ceb:sv.ceb,wait:Math.max(0,t-(tr.reqTime??t))});
+  tr.state="SVC";tr.pending=sv;push(te,"END",tr.i,tr.token);}
+ function emitFilt(tr,tAbs){const a0=Math.max(0,-tr.filtStart),len=tAbs-tr.filtStart;emit(tr.i,tr.filtStart,filt,a0,Math.min(tF,len),"");if(len>tF)emit(tr.i,tr.filtStart,filt,Math.max(a0,tF),len,"ext");}
+ function tryGrant(t){for(let gi=0;gi<P.groups.length;gi++){if(!busy[gi]&&queue[gi].length)grant(gi,t);}}
+ let guard=0;
+ function handle(ev){
+  const tr=trains[ev.tr],gi=groupOf[ev.tr];
+  if(ev.type==="END"){busy[gi]=false;const sv=tr.pending;const D=days[Math.min(totalDays-1,Math.floor(ev.t/DAY))];D.cycles++;if(sv.ceb)D.ceb[sv.ceb]=(D.ceb[sv.ceb]||0)+1;
+   if(sv.willCeb){tr.cDone=0;tr.row=(tr.row+1)%SC.length;}else tr.cDone++;
+   // новая фильтрация с разгоном
+   const te=play(tr.i,ev.t,T.FR,"");tr.state="F";tr.filtStart=te;tr.reqTime=null;push(te+tF,"REQ",tr.i,tr.token);}
+  else if(ev.type==="REQ"){if(ev.token!==tr.token||tr.state!=="F")return;tr.reqTime=ev.t;queue[gi].push(tr.i);queue[gi].sort((a,b)=>(trains[a].reqTime-trains[b].reqTime)||(a-b));push(ev.t+P.maxExt,"EXT",tr.i,tr.token);}
+  else if(ev.type==="EXT"){if(ev.token!==tr.token||tr.state!=="F")return;
+   // предел продления: фильтрация до t, затем явный останов
+   emitFilt(tr,ev.t);
+   const te=play(tr.i,ev.t,T.FS,"");days[Math.min(totalDays-1,Math.floor(ev.t/DAY))].stops++;tr.state=te>ev.t?"STOP":"WAIT";tr.stopEnd=te;if(tr.state==="STOP")push(te,"STOPEND",tr.i,tr.token);}
+  else if(ev.type==="STOPEND"){if(ev.token===tr.token&&tr.state==="STOP")tr.state="WAIT";}
+  if(++guard>8e6)throw new Error("Превышен лимит событий");
+ }
+ // порядок в один момент: завершения → заявки → окончания остановов → разрешения → пределы продления → разрешения
+ while(EV.length){const t=popPeekT();if(t>=tEnd)break;
+  const now=EV.filter(x=>Math.abs(x.t-t)<=1e-9);
+  now.filter(x=>x.type!=="EXT").sort((a,b)=>ORDER[a.type]-ORDER[b.type]||a.tr-b.tr).forEach(x=>{EV.splice(EV.indexOf(x),1);handle(x);});
+  tryGrant(t);
+  EV.filter(x=>Math.abs(x.t-t)<=1e-9&&x.type==="EXT").sort((a,b)=>a.tr-b.tr).forEach(x=>{EV.splice(EV.indexOf(x),1);handle(x);});
+  tryGrant(t);
+ }
+ function popPeekT(){let m=Infinity;for(const x of EV)if(x.t<m)m=x.t;return m;}
+ // незавершённая фильтрация на конце горизонта
+ trains.forEach(tr=>{if(tr.state==="F"&&tr.filtStart<tEnd){emitFilt(tr,tEnd);}
+  else if(tr.state==="WAIT"&&tr.stopEnd<tEnd)emit(tr.i,tr.stopEnd,waitS,0,tEnd-tr.stopEnd,"wait");});
+ /* суточные максимумы станций (свип по кусочно-линейным функциям) */
+ days.forEach((D,di)=>{const st=sweep(D.pieces.filter(p=>p[0]==="F"));D.feedMax=st.max;D.feedMin=st.min;
+  D.bwMax={};P.groups.forEach((g,gi)=>{D.bwMax[gi]=sweep(D.pieces.filter(p=>p[0]==="B"&&p[1]===gi),true).max;});
+  D.pieces=null;});
+ return {days:days.slice(P.warmupDays),detail:DET,dosingMax,ctx,T,CEB,log:LOG,engine:ENGINE};
+}
+function sweep(ps,onlyActive){if(!ps.length)return {max:0,min:0};const ev=[];
+ ps.forEach(p=>{const k=(p[5]-p[4])/Math.max(1e-9,p[3]-p[2]);ev.push([p[2],1,p[4]-k*p[2],k],[p[3],-1,p[4]-k*p[2],k]);});
+ ev.sort((a,b)=>a[0]-b[0]||a[1]-b[1]);let A=0,B=0,mx=-Infinity,mn=Infinity,i=0;
+ const t0=ev[0][0],t1=ev[ev.length-1][0];
+ while(i<ev.length){const t=ev[i][0];const before=A+B*t;if(i>0){mx=Math.max(mx,before);if(t>t0)mn=Math.min(mn,before);}
+  while(i<ev.length&&ev[i][0]===t){A+=ev[i][1]*ev[i][2];B+=ev[i][1]*ev[i][3];i++;}
+  const after=A+B*t;if(i<ev.length){mx=Math.max(mx,after);mn=Math.min(mn,after);}}
+ return {max:Math.max(0,mx),min:isFinite(mn)?Math.max(0,mn):0};}
+
+/* ---------- сводка за период ---------- */
+function summarize(sim,P){const ds=sim.days;const Tsum={raw:0,rawFilt:0,uf:0,ff:0,bw:0,src:{UF:0,RO1:0,RO2:0},drain:{},chem:{},ceb:{},cycles:0,wait:0,ext:0,stops:0};
+ ds.forEach(D=>{["raw","rawFilt","uf","ff","bw","cycles","wait","ext","stops"].forEach(k=>Tsum[k]+=D[k]);for(const k in D.src)Tsum.src[k]+=D.src[k];for(const k in D.drain)Tsum.drain[k]=(Tsum.drain[k]||0)+D.drain[k];for(const k in D.chem)Tsum.chem[k]=(Tsum.chem[k]||0)+D.chem[k];for(const k in D.ceb)Tsum.ceb[k]=(Tsum.ceb[k]||0)+D.ceb[k];});
+ const e1=P.eta1,e2=P.eta2;const net=V=>V.uf-(V.src.UF+kP1(e1)*V.src.RO1+kP2(e1,e2)*V.src.RO2);
+ const hours=ds.length*24;const daily=ds.map(D=>({net:net(D),raw:D.raw,uf:D.uf,feedMax:D.feedMax,feedMin:D.feedMin,bwMax:D.bwMax}));
+ const Vnet=net(Tsum);const ro=roBalance(Tsum.src.RO1,Tsum.src.RO2,e1,e2);
+ return {T:Tsum,hours,days:ds.length,Vnet,Qnet:Vnet/hours,Q2:Tsum.raw/hours,Q2filt:Tsum.rawFilt/hours,Q1unit:sim.ctx.Qf,Q1N:sim.ctx.Qf*P.N,
+  daily,dayNetMin:Math.min(...daily.map(d=>d.net)),dayNetMax:Math.max(...daily.map(d=>d.net)),feedMax:Math.max(...daily.map(d=>d.feedMax)),feedMin:Math.min(...daily.map(d=>d.feedMin)),
+  bwMax:P.groups.map((g,gi)=>Math.max(...daily.map(d=>d.bwMax[gi]||0))),ro,SN:{UF:Tsum.src.UF,RO1eq:kP1(e1)*Tsum.src.RO1,RO2eq:kP2(e1,e2)*Tsum.src.RO2}};}
+
+/* один обычный цикл (без очередей) — для теста D и проверок шаблона */
+function cycleVolumes(P){const ctx={A_unit:P.A_unit,Qf:P.J*P.A_unit/1000};ctx.Qff=P.ffLinked?ctx.Qf:P.Qff;const R=st=>st.map(s=>resolveStage(s,ctx));
+ const L=[...R(P.rec.filtRamp),{name:"F",kind:"F",from:"raw",to:"UF",produces:true,q0:ctx.Qf,q1:ctx.Qf,t:P.rec.tFilt},...R(P.rec.preService),...R(P.rec.bw)];
+ let T=0,UF=0,FF=0,BW=0,raw=0;L.forEach(s=>{const v=vol(s.q0,s.q1,s.t);T+=s.t;if(s.produces)UF+=v;if(s.kind==="FF")FF+=v;if(s.from==="UF")BW+=v;if(s.from==="raw")raw+=v;});
+ return {T,UF,FF,BW,raw,net:UF-BW,Qraw:raw/T*3600,Qnet:(UF-BW)/T*3600};}
+function forward(P){const sim=simulate(P);return {sim,sum:summarize(sim,P)};}
+
+/* ---------- U-07: предварительная площадь (без очередей) ---------- */
+function prelimArea(P,target){
+ // нормативный общий цикл одной установки, без ожиданий; расходы при A_unit = 1000 м² и проверка линейности
+ const lin=[P.rec.filtRamp,P.rec.filtStop,P.rec.preService,P.rec.bw,...Object.values(P.rec.ceb).map(c=>c.stages)].flat().every(s=>!s.flow||["lmh","filt","ff"].includes(s.flow.u)||(s.flow.v0===0&&s.flow.v1===0));
+ const A=1000,ctx={A_unit:A,Qf:P.J*A/1000};ctx.Qff=P.ffLinked?ctx.Qf:P.Qff;const R=st=>st.map(s=>resolveStage(s,ctx));
+ let t=0,uf=0,UFd=0,RO1=0,RO2=0;const add=list=>list.forEach(s=>{const v=vol(s.q0,s.q1,s.t);t+=s.t;if(s.produces)uf+=v;if(s.from==="UF")UFd+=v;if(s.from==="RO1")RO1+=v;if(s.from==="RO2")RO2+=v;});
+ P.supercycle.forEach(r=>{for(let k=0;k<r.n;k++){add(R(P.rec.filtRamp));t+=P.rec.tFilt;uf+=ctx.Qf*P.rec.tFilt/3600;add(R(P.rec.preService));add(R(P.rec.bw));}if(r.ceb&&P.rec.ceb[r.ceb])add(R(P.rec.ceb[r.ceb].stages));});
+ const net=uf-(UFd+kP1(P.eta1)*RO1+kP2(P.eta1,P.eta2)*RO2);const qSpec=net/(t/3600)/A;// м³/ч на м²
+ return {linear:lin,qSpec,cycleT:t,area:qSpec>0?target/qSpec:NaN,feasible:qSpec>0,uf,net};}
+
+/* ---------- U-06: обратный решатель J ---------- */
+function solveJ(P,target,opt={}){const lo0=opt.lo??10,hi0=opt.hi??200,tol=opt.tol??0.01,maxIt=opt.maxIt??40;const it=[];
+ const f=J=>{const r=forward({...P,J}).sum;it.push({J,Qnet:r.Qnet});return r.Qnet-target;};
+ let lo=lo0,hi=hi0,flo=f(lo),fhi=f(hi);
+ if(flo*fhi>0)return {status:fhi<0?"unreachable":"belowRange",lo,hi,flo,fhi,deficit:fhi<0?-fhi:null,it};
+ let J=NaN,fJ=NaN;for(let k=0;k<maxIt;k++){J=(lo+hi)/2;fJ=f(J);if(Math.abs(fJ)<=tol)break;if(flo*fJ<0){hi=J;fhi=fJ;}else{lo=J;flo=fJ;}}
+ const check=forward({...P,J}).sum;// повторный forward
+ return {status:Math.abs(check.Qnet-target)<=tol?"converged":"notConverged",J,residual:check.Qnet-target,check,it,bounds:[lo0,hi0],tol};}
+
+/* ---------- U-08: напор ---------- */
+function head(b){const g=9.80665,rho=b.rho??998;const need=["p_out","p_in","z_out","z_in","h_loss"];const miss=need.filter(k=>!isNum(b[k]));
+ const dpm=isNum(b.dp_membrane_bar)?b.dp_membrane_bar:0;
+ if(miss.length)return {complete:false,miss};
+ const H=(b.p_out-b.p_in)*1e5/(rho*g)+(b.z_out-b.z_in)+b.h_loss+dpm*1e5/(rho*g);
+ return {complete:true,H,parts:{dp:(b.p_out-b.p_in)*1e5/(rho*g),dz:b.z_out-b.z_in,loss:b.h_loss,membrane:dpm*1e5/(rho*g)}};}
+
+return {ENGINE,cycleVolumes,vol,volPart,dosing,roBalance,kP1,kP2,simulate,summarize,forward,prelimArea,solveJ,head};
+})();
+
+
+/* Шаблоны режимов. Происхождение каждого значения: "задание §N", "рекомендация S2 (по заданию)", "демо", "предложение". */
+const UFT=(()=>{
+"use strict";
+const S=(id,name,kind,t,flow,from,to,extra={})=>({id,name,kind,t,flow,from,to,...extra});
+function chem(prefix,title,doses,drain,soak,opts={}){const d=doses;const inter=opts.inter;
+ return [
+  S(prefix+"-P0",`${title}: пуск насоса подачи`,"CEB",7,{u:"lmh",v0:0,v1:120},"UF",drain,{station:"bw",dose:d,orig:"демо",dosing:"вкл (предложение)"}),
+  S(prefix+"-P1",`${title}: подача в нижний сброс`,"CEB",30,{u:"lmh",v0:120,v1:120},"UF",drain,{station:"bw",dose:d,orig:"поток 120 л/(м²·ч) — рекомендация S2 по заданию; время демо"}),
+  S(prefix+"-P2",`${title}: переключение`,"CEB",8,{u:"lmh",v0:120,v1:120},"UF",drain,{station:"bw",dose:d,orig:"демо"}),
+  S(prefix+"-P3",`${title}: подача в верхний сброс`,"CEB",30,{u:"lmh",v0:120,v1:120},"UF",drain,{station:"bw",dose:d,orig:"демо"}),
+  S(prefix+"-P4",`${title}: останов и изоляция`,"CEB",7,{u:"lmh",v0:120,v1:0},"UF",drain,{station:"bw",dose:d,orig:"демо",dosing:"вкл (предложение)"}),
+  S(prefix+"-S",`${title}: выдержка`,"SOAK",soak,{u:"m3h",v0:0,v1:0},"none",null,{orig:"демо"}),
+  S(prefix+"-R0",`${inter?"Межстадийная отмывка":title+": отмывка"} — пуск`,"RINSE",7,{u:"lmh",v0:0,v1:230},"UF",drain,{station:"bw",orig:"демо"}),
+  S(prefix+"-R1",`${inter?"Межстадийная отмывка":title+": отмывка"} в нижний сброс`,"RINSE",60,{u:"lmh",v0:230,v1:230},"UF",drain,{station:"bw",orig:"поток 230 л/(м²·ч) — рекомендация S2 по заданию; время демо"}),
+  S(prefix+"-R2",`${inter?"Межстадийная отмывка":title+": отмывка"} — переключение`,"RINSE",8,{u:"lmh",v0:230,v1:230},"UF",drain,{station:"bw",orig:"демо"}),
+  S(prefix+"-R3",`${inter?"Межстадийная отмывка":title+": отмывка"} в верхний сброс`,"RINSE",60,{u:"lmh",v0:230,v1:230},"UF",drain,{station:"bw",orig:"демо"}),
+  S(prefix+"-R4",`${inter?"Межстадийная отмывка":title+": отмывка"} — останов`,"RINSE",7,{u:"lmh",v0:230,v1:0},"UF",drain,{station:"bw",orig:"демо"})];}
+function defaults(){
+ const D={NaOH:400,NaOCl:200,HCl:500};// мг/л действующего вещества — ДЕМО
+ return {
+  tFilt:1800,
+  filtRamp:[S("FR","Разгон фильтрации","FR",10,{u:"filt",from0:true},"raw","UF",{produces:true,orig:"демо"})],
+  filtStop:[S("FST","Останов фильтрации при пределе продления","FS",10,{u:"filt",to0:true},"raw","UF",{produces:true,orig:"предложение"})],
+  preService:[
+   S("FX","Переход фильтрация → FF","FX",0,{u:"ff"},"raw","drain_ff",{orig:"демо (0 — переход мгновенный)"}),
+   S("FF","Прямая промывка исходной водой (FF)","FF",30,{u:"ff"},"raw","drain_ff",{orig:"задание §10: 30 с, расход = фильтрации"}),
+   S("FFS","Останов подачи после FF","FFS",5,{u:"ff",to0:true},"raw","drain_ff",{orig:"демо"})],
+  restart:[S("RS","Пуск подачи после ожидания","RS",10,{u:"ff",from0:true},"raw","drain_ff",{orig:"предложение"})],
+  bw:[
+   S("BW0","BW: разгон насоса","BW",7,{u:"lmh",v0:0,v1:230},"UF","drain_bw_bottom",{station:"bw",orig:"задание §10 (вне Net BW)"}),
+   S("BW1","BW: нижний сброс BWDB","BW",30,{u:"lmh",v0:230,v1:230},"UF","drain_bw_bottom",{station:"bw",orig:"задание §10"}),
+   S("BW2","BW: переключение","BW",8,{u:"lmh",v0:230,v1:230},"UF","drain_bw_bottom",{station:"bw",orig:"задание §10 (входит в Net BW)"}),
+   S("BW3","BW: верхний сброс BWDT","BW",22,{u:"lmh",v0:230,v1:230},"UF","drain_bw_top",{station:"bw",orig:"задание §10"}),
+   S("BW4","BW: останов насоса","BW",7,{u:"lmh",v0:230,v1:0},"UF","drain_bw_top",{station:"bw",orig:"задание §10 (вне Net BW)"})],
+  ceb:{
+   "CEB1.1A":{name:"CEB 1.1(A) щелочная",src:"UF",stages:chem("A","Щелочная",{NaOH:D.NaOH},"drain_chem_alk",600)},
+   "CEB1.1B":{name:"CEB 1.1(B) щелочно-окислительная",src:"UF",stages:chem("B","Щелочно-окислительная",{NaOH:D.NaOH,NaOCl:D.NaOCl},"drain_chem_cl",900)},
+   "CEB1":{name:"CEB 1 щелочная + кислотная",src:"UF",stages:[...chem("1A","Щелочная",{NaOH:D.NaOH},"drain_chem_alk",600,{inter:true}),...chem("1K","Кислотная",{HCl:D.HCl},"drain_chem_acid",600)]},
+   "CEB2":{name:"CEB 2 кислотная",src:"UF",stages:chem("K","Кислотная",{HCl:D.HCl},"drain_chem_acid",600)},
+   "CEB3":{name:"CEB 3 окислительная",src:"UF",stages:chem("O","Окислительная",{NaOCl:D.NaOCl},"drain_chem_cl",900)}}
+ };}
+// Источник CEB применяется ко всем стадиям программы (подача и все отмывки)
+function applySources(rec){for(const k in rec.ceb){const c=rec.ceb[k];c.stages.forEach(s=>{if(s.from!=="none")s.from=s.srcOverride||c.src;});}return rec;}
+// Тест D (§24.1): все прочие переходы нулевые
+function testD(){const r=defaults();r.filtRamp[0].t=0;r.preService[2].t=0;r.preService[0].t=0;return r;}
+return {defaults,applySources,testD};
+})();
+
+
+/* Тесты ядра: численные §24.1 и функциональные §24.2 (часть). Допуск указан в каждом тесте. */
+const UFTests=(()=>{
+const near=(a,b,tol=1e-6)=>Math.abs(a-b)<=tol;
+function baseP(UFE,UFT,over={}){const rec=UFT.applySources(UFT.defaults());
+ return {N:4,groups:[[0,1,2,3]],A_unit:1440,J:60,ffLinked:true,Qff:null,rec,supercycle:[{n:15,ceb:"CEB1.1A"},{n:10,ceb:"CEB3"}],maxExt:300,warmupDays:2,days:14,eta1:0.75,eta2:0.90,detailDay:0,...over};}
+function run(UFE,UFT){const R=[];const add=(id,name,pass,detail)=>R.push({id,name,pass,detail});
+ // A — линейный разгон
+ const vA=UFE.vol(0,100,10),vA1=UFE.volPart(0,100,10,0,5);
+ add("A","Линейный разгон 0→100 м³/ч за 10 с",near(vA,0.1388888889,1e-9)&&near(vA1,0.0347222222,1e-9),`V = ${vA.toFixed(10)} м³; первая половина времени = ${vA1.toFixed(10)} м³ (¼ объёма)`);
+ // B — дозирование
+ const b=UFE.dosing(20,100,0.10,1.2);
+ add("B","Дозирование D=20 мг/л, Q=100 м³/ч, w=0,10, ρ=1,2",near(b.Ma,2)&&near(b.Mc,20)&&near(b.Lc,16.6666666667,1e-9),`действующее ${b.Ma} кг/ч; товарный ${b.Mc} кг/ч; ${b.Lc.toFixed(10)} л/ч`);
+ // C — ОО-2
+ const c=UFE.roBalance(0,1,0.75,0.90);
+ add("C","1 м³ пермеата ОО-2 при 0,75/0,90",near(c.F1,1.4814814815,1e-9)&&near(c.R2,0.1111111111,1e-9)&&near(c.UF,1.3703703704,1e-9)&&near(c.C1,0.3703703704,1e-9)&&near(c.check,0,1e-12)&&near(UFE.kP2(0.75,0.9),1.3703703704,1e-9),
+  `подача ОО-1 ${c.F1.toFixed(10)}; возврат ${c.R2.toFixed(10)}; свежий УФ ${c.UF.toFixed(10)}; сброс ОО-1 ${c.C1.toFixed(10)}; невязка ${c.check.toExponential(1)}`);
+ // D — синтетический фильтроцикл
+ const PD={A_unit:1000,J:50,ffLinked:true,rec:UFT.applySources(UFT.testD())};const d=UFE.cycleVolumes(PD);
+ const okD=near(d.T,1904,1e-9)&&near(d.UF,25,1e-9)&&near(d.FF,0.4166666667,1e-9)&&near(d.BW,4.2805555556,1e-9)&&near(d.raw,25.4166666667,1e-9)&&near(d.net,20.7194444444,1e-9)&&near(d.Qraw,48.0567226891,1e-9)&&near(d.Qnet,39.1754201681,1e-9);
+ add("D","Синтетический фильтроцикл",okD,`T=${d.T} с; V_UF=${d.UF}; V_FF=${d.FF.toFixed(10)}; V_BW=${d.BW.toFixed(10)}; V_raw=${d.raw.toFixed(10)}; V_net=${d.net.toFixed(10)}; Q_raw=${d.Qraw.toFixed(10)}; Qnet=${d.Qnet.toFixed(10)}`);
+ // Функциональные
+ const P=baseP(UFE,UFT);const F=UFE.forward(P);const s=F.sum;
+ const cyc=s.T.cycles,ce=s.T.ceb;const ratio=(ce["CEB1.1A"]||0)/Math.max(1,(ce["CEB3"]||0));
+ add("F1","Общий цикл 15 C → CEB 1.1(A) → 10 C → CEB 3: 25 обычных циклов на повтор",Math.abs(cyc/((ce["CEB1.1A"]||0)+(ce["CEB3"]||0))-12.5)<0.6&&Math.abs(ratio-1)<0.1,`циклов ${cyc}; CEB 1.1(A) ${ce["CEB1.1A"]||0}; CEB 3 ${ce["CEB3"]||0}; циклов на CEB ≈ ${(cyc/((ce["CEB1.1A"]||0)+(ce["CEB3"]||0))).toFixed(2)} (ожидается 12,5)`);
+ // в группе не пересекаются BW/CEB (по детализированным суткам)
+ const st=F.sim.detail.filter(x=>["BW","CEB","SOAK","RINSE"].includes(x.kind)).sort((a,b)=>a.t0-b.t0);let ov=0;const byTr={};
+ st.forEach(x=>{(byTr[x.tr]??=[]).push(x);});const blocks=[];Object.values(byTr).forEach(L=>{let cur=null;L.forEach(x=>{if(cur&&x.t0-cur.t1<1e-6){cur.t1=x.t1;}else{cur={tr:x.tr,t0:x.t0,t1:x.t1};blocks.push(cur);}});});
+ blocks.sort((a,b)=>a.t0-b.t0);for(let i=1;i<blocks.length;i++)if(blocks[i].t0<blocks[i-1].t1-1e-6&&blocks[i].tr!==blocks[i-1].tr)ov++;
+ add("F2","В одной группе BW/CEB не пересекаются (выдержка сохраняет блокировку)",ov===0,`проверено блоков: ${blocks.length}; пересечений: ${ov}`);
+ // X не влияет (X не входит в ядро производительности)
+ add("F3","X не меняет Q1/Q2/Qnet при том же N",true,"X не является входом событийного ядра; влияет только на установленную площадь и состав оборудования");
+ // год ≠ первые сутки × 365
+ add("F4","Период ≠ первые сутки × число суток",Math.abs(s.daily[0].net*s.days-s.Vnet)>1e-6||s.dayNetMax!==s.dayNetMin,`сутки 1: ${s.daily[0].net.toFixed(2)} м³; сумма периода ${s.Vnet.toFixed(1)} м³; min/max суток ${s.dayNetMin.toFixed(1)} / ${s.dayNetMax.toFixed(1)}`);
+ // разные группы могут промываться одновременно
+ const P2=baseP(UFE,UFT,{groups:[[0,1],[2,3]],days:3});const F2=UFE.forward(P2);
+ add("F5","Разные группы: станции считаются отдельно",F2.sum.bwMax.length===2,`макс. расход BW-станций по группам: ${F2.sum.bwMax.map(x=>x.toFixed(1)).join(" / ")} м³/ч`);
+ // продление 0
+ const P0=baseP(UFE,UFT,{maxExt:0,days:3});const F0=UFE.forward(P0);
+ add("F6","Максимальное продление 0: ожидание без выработки, без продления",F0.sum.T.ext<1e-6,`продление ${F0.sum.T.ext.toFixed(0)} с; ожидание ${F0.sum.T.wait.toFixed(0)} с; остановов ${F0.sum.T.stops}`);
+ // обратный решатель с повторным forward
+ const P3=baseP(UFE,UFT,{days:7});const target=s.Qnet*0.95;const sol=UFE.solveJ(P3,target,{lo:20,hi:120,tol:0.05});
+ add("F7","Обратный решатель J: результат подтверждён повторным forward-расчётом",sol.status==="converged",`цель ${target.toFixed(2)} м³/ч; J = ${sol.J?.toFixed(3)} л/(м²·ч); невязка ${sol.residual?.toFixed(4)} м³/ч; итераций ${sol.it.length}`);
+ // баланс входов/выходов
+ const T=s.T;const drains=Object.values(T.drain).reduce((a,b)=>a+b,0);const bal=T.raw+T.src.UF+T.src.RO1+T.src.RO2-(T.uf+drains);
+ add("F8","Баланс: вход = выход за период",Math.abs(bal)<1e-6*Math.max(1,T.raw),`исходная ${T.raw.toFixed(3)} + промывная ${(T.src.UF+T.src.RO1+T.src.RO2).toFixed(3)} − УФ ${T.uf.toFixed(3)} − стоки ${drains.toFixed(3)} = ${bal.toExponential(2)} м³`);
+ // реагенты не начисляются на выдержку и отмывку
+ const chemStages=F.sim.CEB["CEB1.1A"].filter(x=>x.dose);const noDoseOnRinse=F.sim.CEB["CEB1.1A"].filter(x=>x.kind==="RINSE"||x.kind==="SOAK").every(x=>!x.dose);
+ add("F9","Реагенты не дозируются на выдержке и отмывках",noDoseOnRinse,`стадий с дозированием в CEB 1.1(A): ${chemStages.length}`);
+ return R;}
+return {run,baseP};
+})();
+
+
+
+/* ============ состояние проекта (демо) ============ */
+const ST={
+ mode:"C", target:{v:250,u:"m3h"}, J0:60, a:60, m:24, N:4, X:1, groups:[[0,1,2,3]],
+ rec:UFT.applySources(UFT.defaults()), tpl:UFT.applySources(UFT.defaults()),
+ supercycle:[{n:15,ceb:"CEB1.1A"},{n:10,ceb:"CEB3"}],
+ maxExt:300, eta1:0.75, eta2:0.90, days:365, warmup:7, solverDays:28, detailDay:0, keepJ:false,
+ win:{start:0,len:6},
+ products:{
+  NaOH:{name:"Натр едкий, раствор (ДЕМО-паспорт)",basis:"NaOH",w:0.46,rho:1.49,C:null,demo:true},
+  NaOCl:{name:"Гипохлорит натрия, раствор (паспорт не заполнен)",basis:"активный хлор Cl₂",w:null,rho:null,C:null},
+  HCl:{name:"Кислота соляная (ДЕМО-паспорт)",basis:"HCl",w:0.31,rho:1.15,C:null,demo:true},
+  MBS:{name:"Натрия метабисульфит (форма Na₂S₂O₅ — задать явно)",basis:"Na₂S₂O₅",w:null,rho:null,C:null}},
+ chem:{}, // программа → реагент → {mode,D,pH,basis}
+ mbs:{mode:"manual",D:null},
+ pumps:{feed:{mode:"calc",p_in:null,p_out:null,z_in:null,z_out:null,h_loss:null,tmp:1.5,Hset:null,Hbasis:""},
+        bw:{mode:"calc",p_in:null,p_out:null,z_in:null,z_out:null,h_loss:null,tmp:3.0,Hset:null,Hbasis:""}},
+ res:null, sol:null, stale:true, inputsHash:""
+};
+// дозы по программам из шаблона (ДЕМО), режим «доза»; щелочь первой программы показана в режиме «целевой pH»
+for(const k in ST.rec.ceb){ST.chem[k]={};ST.rec.ceb[k].stages.forEach(s=>{if(s.dose)for(const r in s.dose)ST.chem[k][r]={mode:"dose",D:s.dose[r],pH:null,basis:"add",demo:true};});}
+ST.chem["CEB1.1A"].NaOH={mode:"pH",D:400,pH:12,basis:"add",demo:true};
+
+const A_unit=()=>ST.a*ST.m;
+const targetM3h=()=>ST.target.u==="m3d"?ST.target.v/24:ST.target.v;
+function engineParams(days,warm,J){const rec=JSON.parse(JSON.stringify(ST.rec));
+ for(const k in rec.ceb){rec.ceb[k].stages.forEach(s=>{if(!s.dose)return;const d={};for(const r in s.dose){const c=ST.chem[k][r];if(c&&c.mode==="dose"&&isNum(c.D))d[r]=c.D;}s.dose=Object.keys(d).length?d:null;});}
+ UFT.applySources(rec);
+ const phase=[];ST.groups.forEach(g=>g.forEach((tr,k)=>phase[tr]=k*ST.rec.tFilt/g.length));
+ return {N:ST.N,groups:ST.groups,phase,A_unit:A_unit(),J:J??ST.J0,ffLinked:true,rec,supercycle:ST.supercycle,maxExt:ST.maxExt,warmupDays:warm??ST.warmup,days:days??ST.days,eta1:ST.eta1,eta2:ST.eta2,detailDay:ST.detailDay};}
+const isNum=v=>typeof v==="number"&&isFinite(v);
+function fmt(x,d){if(!isNum(x))return "—";const a=Math.abs(x);const dd=d??(a>=1000?0:a>=100?1:a>=10?2:3);return x.toLocaleString("ru-RU",{maximumFractionDigits:dd,minimumFractionDigits:0});}
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const pill=(c,t)=>`<span class="pill ${c}">${t}</span>`;
+const PROP=t=>`<span class="tagp" title="Предложено, не установлено заказчиком">ПРЕДЛОЖЕНИЕ${t?": "+t:""}</span>`;
+function markStale(){ST.stale=true;const el=document.getElementById("calcstate");if(el)el.innerHTML=pill("s-clarify","Результаты устарели — нажмите «Рассчитать»");}
+
+/* ============ расчёт ============ */
+function busy(on,msg){let b=document.getElementById("busy");if(on){if(!b){b=document.createElement("div");b.id="busy";b.className="busy";b.innerHTML="<div></div>";document.body.appendChild(b);}b.firstChild.textContent=msg;}else if(b)b.remove();}
+function recalc(){busy(true,"Годовое моделирование…");setTimeout(()=>{try{
+ const t0=performance.now();ST.sol=null;let J=ST.J0;
+ if(ST.mode==="C"||ST.mode==="B"){if(!ST.keepJ){const tgt=targetM3h();
+   const s1=UFE.solveJ(engineParams(ST.solverDays,3),tgt,{lo:5,hi:250,tol:0.02});ST.sol={...s1,period:ST.solverDays};
+   if(s1.status==="converged"||s1.status==="notConverged"){// уточнение на полном периоде
+    let lo=s1.J*0.97,hi=s1.J*1.03,Jb=s1.J,best=null;for(let k=0;k<6;k++){const r=UFE.forward(engineParams(null,null,Jb)).sum;const res=r.Qnet-tgt;best={J:Jb,res,sum:r};if(Math.abs(res)<=0.02)break;if(res<0)lo=Jb;else hi=Jb;Jb=(lo+hi)/2;}
+    J=best.J;ST.sol.Jfinal=J;ST.sol.residualYear=best.res;ST.sol.statusYear=Math.abs(best.res)<=0.02?"converged":"notConverged";}
+   else J=NaN;}}
+ if(isNum(J)){const F=UFE.forward(engineParams(null,null,J));ST.res={...F,J,ms:performance.now()-t0,at:new Date().toLocaleTimeString("ru-RU"),P:engineParams(null,null,J)};}
+ else ST.res=null;
+ ST.stale=false;busy(false);render();}catch(e){busy(false);alertMsg(e.message);}},30);}
+function alertMsg(m){const el=document.getElementById("calcstate");if(el)el.innerHTML=pill("s-nodata",esc(m));}
+
+/* ============ навигация ============ */
+const NAV=[["Проект",[["u1","U1","Структура и линия"],["u2","U2","Вода перед УФ и J"],["u3","U3","Режим расчёта"],["u4","U4","Площадь и компоновка"]]],
+ ["Режимы",[["u5","U5","Обычный цикл"],["u6","U6","Программы CEB"],["u7","U7","Общий цикл"],["u8","U8","Группы и очередь"],["u9","U9","Источники CEB и ОО"]]],
+ ["Оборудование и химия",[["u10","U10","Реагенты CEB"],["u11","U11","Насосы и дозаторы"]]],
+ ["Результаты",[["u12","U12","Результаты"],["u13","U13","ТКП, схема, записка"],["tests","Т","Тесты ядра"]]]];
+let ROUTE="u12";
+const V={};
+function render(){document.getElementById("rail").innerHTML=NAV.map(([g,it])=>`<div class="grp">${g}</div>`+it.map(([k,n,l])=>`<a href="#${k}"${k===ROUTE?' aria-current="page"':""}><span class="n">${n}</span>${l}</a>`).join("")).join("");
+ const el=document.getElementById("calcstate");if(el)el.innerHTML=ST.stale?pill("s-clarify","Результаты устарели — нажмите «Рассчитать»"):pill("s-balance",`Рассчитано ${ST.res?.at||""} · ${fmt(ST.res?.ms,0)} мс`);
+ document.getElementById("main").innerHTML=(V[ROUTE]||V.u12)();}
+function route(){const h=location.hash.slice(1);ROUTE=V[h]?h:"u12";render();window.scrollTo(0,0);}
+function setv(path,val,full){const ks=path.split(".");let o=ST;for(let i=0;i<ks.length-1;i++)o=o[ks[i]];o[ks.at(-1)]=val;markStale();if(full)render();}
+const nv=s=>{s=String(s).trim().replace(",",".");if(s==="")return null;const v=Number(s);return isFinite(v)?v:null;};
+function numIn(path,val,o={}){return `<div class="f"><label for="${path}">${o.l}${o.req?' <span class="req">*</span>':""}</label><div class="row"><input id="${path}" class="num" value="${isNum(val)?String(val).replace(".",","):""}" placeholder="${o.ph||"нет данных"}" onchange="setv('${path}',nv(this.value),1)">${o.u?`<span class="u">${o.u}</span>`:""}</div>${o.hint?`<div class="hint">${o.hint}</div>`:""}</div>`;}
+
+/* ============ U1 ============ */
+V.u1=()=>`<h1>Структура проекта и линии</h1><p class="lead">Узел коагуляции и УФ-система входят в одну технологическую линию. Изменение исходных данных делает зависимые результаты устаревшими.</p>
+<div class="grid2"><div class="panel"><h2>ДЕМО — Водоподготовка, линия 1</h2><ul class="tree"><li><b>Источник: поверхностная вода (демо)</b><ul><li>Анализ ДЕМО-А-0915 — исходная вода</li><li>Вода перед УФ после коагуляции — <span class="muted">нет анализа</span></li><li>Пермеат ОО-1 / ОО-2 — <span class="muted">нет анализа</span></li></ul></li>
+ <li><b>Линия 1</b><ul><li>Узел коагуляции · ПОХА · RC-0001 в.1 ${ST.stale?pill("s-clarify","связанный расход устарел"):pill("s-balance","связан с расписанием УФ")}</li>
+ <li>УФ-система ${ST.N}+${ST.X} · ${ST.m} модулей по ${fmt(ST.a)} м² · ${ST.groups.length} гр. BW ${ST.stale?pill("s-clarify","нужен пересчёт"):pill("s-balance","рассчитана")}</li><li>Документы: ${pill("s-clarify","после регистрации")}</li></ul></li></ul></div>
+<div class="panel"><h2>Связь с узлом коагуляции</h2>${ST.res?`<dl class="kv"><dt>Расход через точку дозирования: минимум расписания</dt><dd>${fmt(ST.res.sum.feedMin)} м³/ч</dd><dt>максимум расписания</dt><dd>${fmt(ST.res.sum.feedMax)} м³/ч</dd><dt>N установок одновременно фильтруют</dt><dd>${fmt(ST.res.sum.Q1N)} м³/ч</dd></dl>
+ <p class="small">Коагулянт дозируется в фактический поток станции исходной воды (фильтрация + FF), а не в Qnet. Насос-дозатор коагулянта подбирается на этот диапазон; контактное время проверяется при максимуме.</p>`:'<p class="muted small">Нет расчёта.</p>'}
+ <div class="msg info small">Автоматического цикла «коагуляция → J → расход» нет: J задаётся явно, связанные результаты помечаются устаревшими.</div></div></div>`;
+
+/* ============ U2 ============ */
+V.u2=()=>`<h1>Вода перед УФ и удельный поток J</h1><p class="lead">Для каждой точки показан статус значения. Отсутствие показателя не равно нулю; требование не равно достигнутому качеству.</p>
+<div class="grid2"><div class="panel"><h2>Точки качества воды</h2><div class="tw"><table><thead><tr><th>Точка</th><th>Мутность</th><th>ВВ</th><th>ПО</th><th>T</th><th>Статус</th></tr></thead><tbody>
+<tr><td>Исходная вода</td><td class="n">6 NTU</td><td class="n">8 мг/л</td><td class="n">6,8</td><td class="n">8 °C</td><td>${pill("s-user","задано (демо)")}</td></tr>
+<tr><td>Перед УФ после коагуляции</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td>${pill("s-nodata","неизвестно")}</td></tr>
+<tr><td>Ультрафильтрат</td><td colspan="4" class="small">требования: SDI15 ≤ 3; ПО ≤ 3 мг O₂/л</td><td>${pill("s-clarify","требование, не результат")}</td></tr>
+<tr><td>Пермеат ОО-1 / ОО-2</td><td colspan="4" class="small">гидравлический выход не даёт анализа</td><td>${pill("s-nodata","неизвестно")}</td></tr></tbody></table></div>
+<p class="footnote">Мутность после непосредственной коагуляции не уменьшается на условный процент: без проверенной модели значение остаётся неизвестным.</p></div>
+<div class="panel"><h2>J — удельный поток фильтрации</h2>
+ <div class="msg bad small"><b>Рекомендация J не определена:</b> в реестре нет проверенной методики для выбранной мембраны и воды (U-09). Нужны: модель мембраны, источник методики, температура расчётной воды, показатели воды перед УФ.</div>
+ <div class="fields">${numIn("J0",ST.J0,{l:"Принятый первоначальный J",u:"л/(м²·ч)",req:1,hint:"введён пользователем (демо)"})}</div>
+ <dl class="kv" style="margin-top:12px"><dt>Рекомендованный J</dt><dd>не определён</dd><dt>Принятый первоначальный J</dt><dd>${fmt(ST.J0)} л/(м²·ч)</dd><dt>Необходимый J после компоновки</dt><dd>${ST.res&&ST.mode!=="A"&&!ST.keepJ?fmt(ST.res.J,2)+" л/(м²·ч)":"—"}</dd></dl>
+ <p class="footnote">Температурная коррекция не применяется (нет методики). Температура относится к выбранному сценарию воды.</p></div></div>`;
+
+/* ============ U3 ============ */
+V.u3=()=>{const lab={A:"Найти Qnet",B:"Найти площадь",C:"Найти J"};const S=(k,f)=>f===k?pill("s-prelim","Рассчитывается"):pill("s-user","Задано");
+ return `<h1>Режим расчёта</h1><p class="lead">Пользователь явно выбирает искомую величину. Длительности стадий — исходные данные, а не переменные оптимизации.</p>
+<div class="panel" style="margin-bottom:16px"><div class="seg">${["A","B","C"].map(k=>`<label><input type="radio" name="mode" ${ST.mode===k?"checked":""} onchange="setv('mode','${k}',1)">${k}. ${lab[k]}</label>`).join("")}</div></div>
+<div class="grid2"><div class="panel"><h2>Величины</h2><div class="tw"><table><thead><tr><th>Величина</th><th>Значение</th><th>Статус</th></tr></thead><tbody>
+<tr><td>Qnet</td><td class="mono">${ST.mode==="A"?"—":fmt(ST.target.v)+" "+(ST.target.u==="m3d"?"м³/сут":"м³/ч")}</td><td>${S("A",ST.mode)}</td></tr>
+<tr><td>Площадь / компоновка</td><td class="mono">${ST.N} × ${ST.m} × ${fmt(ST.a)} м²</td><td>${ST.mode==="B"?pill("s-prelim","Рассчитывается (предварительно)"):pill("s-user","Задано")}</td></tr>
+<tr><td>J</td><td class="mono">${fmt(ST.J0)} л/(м²·ч)</td><td>${ST.mode==="A"||ST.keepJ?pill("s-user","Задано"):pill("s-prelim","Рассчитывается после компоновки")}</td></tr></tbody></table></div></div>
+<div class="panel"><h2>Требуемая производительность</h2>${ST.mode==="A"?'<p class="muted small">В режиме A Qnet является результатом.</p>':`<div class="fields">${numIn("target.v",ST.target.v,{l:"Требуемый Qnet",u:ST.target.u==="m3d"?"м³/сут":"м³/ч",req:1})}<div class="f"><label for="tu">Единицы</label><select id="tu" onchange="setv('target.u',this.value,1)"><option value="m3h"${ST.target.u==="m3h"?" selected":""}>м³/ч (среднее)</option><option value="m3d"${ST.target.u==="m3d"?" selected":""}>м³/сут</option></select></div></div>
+ ${ST.target.u==="m3d"?`<p class="footnote">= ${fmt(targetM3h(),3)} м³/ч среднего расхода.</p>`:""}
+ <label class="small" style="display:flex;gap:6px;align-items:center;margin-top:12px"><input type="checkbox" id="keepJ" ${ST.keepJ?"checked":""} onchange="setv('keepJ',this.checked,1)"> Сохранить исходный J и пересчитать Qnet для выбранной компоновки</label>`}
+ <div class="msg info small">Если заданы все три величины, сервис проверит согласованность и спросит, какую считать зависимой; произвольный параметр не меняется.</div></div></div>`;};
+
+/* ============ U4 ============ */
+V.u4=()=>{const pre=UFE.prelimArea(engineParams(1,0),targetM3h());const Au=A_unit();const Nsug=Math.ceil(pre.area/Au);
+ return `<h1>Предварительная площадь и компоновка N+X</h1><p class="lead">Предварительная площадь считается по нормативному общему циклу одной установки без ограничений общей станции. Окончательный результат — годовой расчёт N установок с очередями.</p>
+<div class="grid2"><div class="stack"><div class="panel"><h2>Предварительная площадь</h2>
+ ${pre.feasible?`<div class="cards"><div class="kcard"><div class="k">ПРЕДВАРИТЕЛЬНО</div><div class="v">${fmt(pre.area,0)}</div><div class="u">м² рабочей площади</div><div class="d">при J = ${fmt(ST.J0)} л/(м²·ч) и Qnet = ${fmt(targetM3h(),1)} м³/ч</div></div><div class="kcard"><div class="k">УДЕЛЬНАЯ НЕТТО-ВЫРАБОТКА</div><div class="v">${fmt(pre.qSpec*1000,2)}</div><div class="u">л/(м²·ч) нетто</div><div class="d">повтор общего цикла ${fmt(pre.cycleT/3600,2)} ч</div></div></div>
+ <p class="footnote">${pre.linear?"Все расходы стадий привязаны к площади — пропорция допустима.":"Есть фиксированные расходы в м³/ч — используйте решатель, пропорция неточна."} Без учёта очередей общей станции.</p>`:
+ `<div class="msg bad">Удельная нетто-выработка ≤ 0: собственные нужды цикла не меньше выработки. Площадь не выдаётся. Проверьте длительность фильтрации, расходы BW/CEB и источники CEB.</div>`}</div>
+ <div class="panel"><h2>Компоновка</h2><div class="fields">${numIn("a",ST.a,{l:"Площадь модуля a",u:"м²",req:1,hint:"каталог не получен (S3): ручной ввод, пределы «не проверено»"})}${numIn("m",ST.m,{l:"Модулей в установке m",u:"шт.",req:1})}${numIn("N",ST.N,{l:"Рабочих установок N",u:"шт.",req:1,full:1})}${numIn("X",ST.X,{l:"Резервных установок X",u:"шт.",req:1})}</div>
+ ${pre.feasible?`<p class="small" style="margin-top:10px">Предложение по N для A_unit = ${fmt(Au,0)} м²: <b>${Nsug}</b> ${Nsug!==ST.N?`<button class="rowbtn" type="button" onclick="setN(${Nsug})">Принять N = ${Nsug}</button>`:"(совпадает)"}</p>`:""}
+ <dl class="kv" style="margin-top:10px"><dt>A_unit = m × a</dt><dd>${fmt(Au,0)} м²</dd><dt>A_work = N × A_unit</dt><dd>${fmt(ST.N*Au,0)} м²</dd><dt>A_installed = (N + X) × A_unit</dt><dd>${fmt((ST.N+ST.X)*Au,0)} м²</dd></dl>
+ <p class="footnote">Резерв X не добавляет выработку и не включается в BW/CEB, реагенты и собственные нужды. Число резервных насосов и дозаторов не задаётся.</p></div></div>
+ <div class="stack"><div class="calc">${solveBlock()}</div></div></div>`;};
+function setN(n){ST.N=n;ST.groups=[Array.from({length:n},(_,i)=>i)];markStale();render();}
+function solveBlock(){const r=ST.res,s=ST.sol;if(!r)return `<h3>Результат компоновки</h3><p class="small muted">Нажмите «Рассчитать».</p>`;
+ if(ST.mode==="A"||ST.keepJ)return `<h3>J сохранён — пересчитан Qnet</h3><dl class="kv"><dt>J</dt><dd>${fmt(r.J,2)} л/(м²·ч)</dd><dt>Qnet годовой</dt><dd>${fmt(r.sum.Qnet,2)} м³/ч</dd>${ST.mode!=="A"?`<dt>Требуется</dt><dd>${fmt(targetM3h(),2)} м³/ч</dd><dt>Разница</dt><dd>${fmt(r.sum.Qnet-targetM3h(),2)} м³/ч</dd>`:""}</dl>`;
+ if(!s)return "";
+ if(s.status==="unreachable")return `<h3>Решение не найдено</h3><div class="msg bad">При J в пределах поиска ${s.bounds[0]}–${s.bounds[1]} л/(м²·ч) требуемый Qnet недостижим. Дефицит при верхней границе: ${fmt(s.deficit,2)} м³/ч. Увеличьте N, m или измените режимы.</div>`;
+ const dJ=r.J-ST.J0;return `<h3>J после компоновки (фиксирован Qnet)</h3>
+ <div class="cards"><div class="kcard"><div class="k">J ИСХОДНЫЙ</div><div class="v">${fmt(ST.J0,2)}</div><div class="u">л/(м²·ч)</div></div><div class="kcard"><div class="k">J НЕОБХОДИМЫЙ</div><div class="v">${fmt(r.J,2)}</div><div class="u">л/(м²·ч) · ${dJ>=0?"+":""}${fmt(dJ,2)} (${dJ>=0?"+":""}${fmt(dJ/ST.J0*100,1)} %)</div></div></div>
+ <dl class="kv" style="margin-top:12px"><dt>Требуемый Qnet</dt><dd>${fmt(targetM3h(),2)} м³/ч</dd><dt>Получен (год, forward)</dt><dd>${fmt(r.sum.Qnet,3)} м³/ч</dd><dt>Невязка</dt><dd>${fmt(s.residualYear,4)} м³/ч</dd><dt>Допуск</dt><dd>± 0,02 м³/ч</dd><dt>Границы поиска J</dt><dd>${s.bounds.join("–")}</dd><dt>Итераций (поиск на ${s.period} сут)</dt><dd>${s.it.length}</dd><dt>Статус</dt><dd>${s.statusYear==="converged"?"сошёлся":"не сошёлся"}</dd></dl>
+ <div class="msg warn small">Математически найденный J — не инженерно проверенный режим: рекомендация J и паспортные пределы модуля не определены.</div>`;}
+
+/* ============ редактор стадий ============ */
+const KIND={FR:"разгон",F:"фильтрация",FS:"останов",FX:"переход",FF:"FF",FFS:"останов",RS:"пуск",BW:"BW",CEB:"подача CEB",SOAK:"выдержка",RINSE:"отмывка",W:"ожидание"};
+const DRAIN={drain_ff:"сток FF",drain_bw_bottom:"BW нижний",drain_bw_top:"BW верхний",drain_chem_alk:"щелочной",drain_chem_acid:"кислотный",drain_chem_cl:"хлорсодерж.",UF:"бак УФ"};
+function flowTxt(f){if(f.u==="filt")return (f.from0?"0 → ":"")+"Q фильтр."+(f.to0?" → 0":"");if(f.u==="ff")return (f.from0?"0 → ":"")+"Q FF"+(f.to0?" → 0":"");return null;}
+function stageRows(list,path,tplList){const A=A_unit(),Qf=ST.J0*A/1000;return list.map((s,i)=>{const tp=tplList?.[i];const ch=tp&&tp.t!==s.t;
+ const q0=s.flow.u==="lmh"?s.flow.v0*A/1000:s.flow.u==="m3h"?s.flow.v0:(s.flow.from0?0:Qf);const q1=s.flow.u==="lmh"?s.flow.v1*A/1000:s.flow.u==="m3h"?s.flow.v1:(s.flow.to0?0:Qf);const v=UFE.vol(q0,q1,s.t);
+ return `<tr class="${ch?"chg":""}"><td class="small">${esc(s.name)}<div class="muted" style="font-size:11px">${esc(s.orig||"")}</div></td><td class="n"><input aria-label="время ${esc(s.name)}" value="${s.t}" onchange="setStage('${path}',${i},'t',nv(this.value))"></td>
+ <td class="n">${flowTxt(s.flow)??`<input aria-label="поток от" value="${s.flow.v0}" onchange="setStage('${path}',${i},'v0',nv(this.value))"> → <input aria-label="поток до" value="${s.flow.v1}" onchange="setStage('${path}',${i},'v1',nv(this.value))"> <span class="u">${s.flow.u==="lmh"?"л/(м²·ч)":"м³/ч"}</span>`}</td>
+ <td class="n">${fmt(q0,1)} → ${fmt(q1,1)}</td><td class="small">${s.from==="none"?"—":s.from}</td><td class="small">${DRAIN[s.to]||"—"}</td><td class="n">${fmt(v,3)}</td><td class="small">${s.dose?Object.entries(s.dose).map(([r])=>r).join(", "):"—"}</td></tr>`;}).join("");}
+function setStage(path,i,k,v){const list=path.startsWith("ceb:")?ST.rec.ceb[path.slice(4)].stages:ST.rec[path];if(v==null||v<0){render();return;}if(k==="t")list[i].t=v;else list[i].flow[k]=v;markStale();render();}
+function stageTable(list,path,tpl){return `<div class="tw"><table class="st-table"><thead><tr><th>Стадия</th><th class="n">t, с</th><th class="n">Поток</th><th class="n">q, м³/ч</th><th>Откуда</th><th>Куда</th><th class="n">V, м³</th><th>Дозир.</th></tr></thead><tbody>${stageRows(list,path,tpl)}</tbody></table></div>`;}
+function sumStages(list){const A=A_unit(),Qf=ST.J0*A/1000;let t=0,prod=0,raw=0,src=0,noProd=0;list.forEach(s=>{const q0=s.flow.u==="lmh"?s.flow.v0*A/1000:s.flow.u==="m3h"?s.flow.v0:(s.flow.from0?0:Qf),q1=s.flow.u==="lmh"?s.flow.v1*A/1000:s.flow.u==="m3h"?s.flow.v1:(s.flow.to0?0:Qf);const v=UFE.vol(q0,q1,s.t);t+=s.t;if(s.produces)prod+=v;else noProd+=s.t;if(s.from==="raw")raw+=v;else if(s.from!=="none")src+=v;});return {t,prod,raw,src,noProd};}
+
+/* ============ U5 ============ */
+V.u5=()=>{const r=ST.rec;const all=[...r.filtRamp,{name:"Фильтрация",t:r.tFilt,flow:{u:"filt"},from:"raw",to:"UF",produces:true},...r.preService,...r.bw];const S=sumStages(all);
+ return `<h1>Обычный цикл C: фильтрация → FF → BW</h1><p class="lead">Время — основной управляющий параметр; объём вычисляется как (q0 + q1)/2 × t/3600. Общее время цикла — сумма стадий, отдельного поля нет.</p>
+<div class="panel" style="margin-bottom:16px"><div class="fields">${numIn("rec.tFilt",r.tFilt,{l:"Длительность фильтрации",u:"с",req:1,hint:"демо; продление — на экране U8"})}</div></div>
+<div class="panel"><h2>Фильтрация и переходы</h2>${stageTable(r.filtRamp,"filtRamp",ST.tpl.filtRamp)}<h2 style="margin-top:16px">Перед BW: FF исходной водой</h2>${stageTable(r.preService,"preService",ST.tpl.preService)}
+<h2 style="margin-top:16px">BW собственным ультрафильтратом</h2>${stageTable(r.bw,"bw",ST.tpl.bw)}
+<p class="footnote">Net BW = BWDB + переключение + BWDT = ${r.bw[1].t+r.bw[2].t+r.bw[3].t} с; разгон и останов вне Net BW. Переключение не добавляется повторно. Расход FF связан с расходом фильтрации одной установки (связь видна, может быть переопределена).</p></div>
+<div class="calc" style="margin-top:16px"><h3>Итог цикла при J = ${fmt(ST.J0)} л/(м²·ч), A_unit = ${fmt(A_unit(),0)} м²</h3><dl class="kv"><dt>Длительность цикла</dt><dd>${fmt(S.t,0)} с</dd><dt>Время без производства УФ</dt><dd>${fmt(S.noProd,0)} с</dd><dt>Произведено УФ</dt><dd>${fmt(S.prod,3)} м³</dd><dt>Исходная вода</dt><dd>${fmt(S.raw,3)} м³</dd><dt>Промывная вода (УФ)</dt><dd>${fmt(S.src,3)} м³</dd><dt>Нетто цикла</dt><dd>${fmt(S.prod-S.src,3)} м³</dd></dl>
+ <div class="legend"><span>Стадии с подсветкой изменены относительно шаблона.</span></div>
+ <div class="msg info small">Останов фильтрации при пределе продления и пуск после ожидания: ${PROP("стадии и их время")} — см. U8.</div></div>`;};
+
+/* ============ U6 ============ */
+let CEBSEL="CEB1.1A";
+V.u6=()=>{const c=ST.rec.ceb[CEBSEL],t=ST.tpl.ceb[CEBSEL];const S=sumStages(c.stages);
+ return `<h1>Программы CEB</h1><p class="lead">Одна химическая стадия: подача в нижний сброс → переход → подача в верхний сброс → останов → выдержка → отмывка в нижний сброс → переход → отмывка в верхний сброс. На выдержке насос остановлен, установка недоступна.</p>
+<div class="panel" style="margin-bottom:16px;display:flex;flex-wrap:wrap;gap:14px;align-items:end"><div class="f"><label for="cebsel">Программа</label><select id="cebsel" onchange="CEBSEL=this.value;render()">${Object.entries(ST.rec.ceb).map(([k,v])=>`<option value="${k}"${k===CEBSEL?" selected":""}>${v.name}</option>`).join("")}</select></div>
+ <div class="f"><label for="cebsrc">Источник воды (подача и все отмывки)</label><select id="cebsrc" onchange="ST.rec.ceb[CEBSEL].src=this.value;UFT.applySources(ST.rec);markStale();render()">${[["UF","Ультрафильтрат"],["RO1","Пермеат ОО-1"],["RO2","Пермеат ОО-2"]].map(([k,l])=>`<option value="${k}"${c.src===k?" selected":""}>${l}</option>`).join("")}</select></div></div>
+<div class="panel">${stageTable(c.stages,"ceb:"+CEBSEL,t.stages)}
+ <p class="footnote">${CEBSEL==="CEB1"?"CEB 1: промежуточной фильтрации нет; межстадийная отмывка — явная стадия. ":""}После предшествующей BW насос останавливается и запускается заново; ещё одна предварительная BW не добавляется. Дозирование на пуске и останове подачи — ${PROP("доза пропорциональна фактическому расходу, включая переходы")}.</p></div>
+<div class="calc" style="margin-top:16px"><h3>Итог программы</h3><dl class="kv"><dt>Длительность (установка недоступна)</dt><dd>${fmt(S.t,0)} с = ${fmt(S.t/60,1)} мин</dd><dt>Промывная вода (${c.src})</dt><dd>${fmt(S.src,3)} м³</dd><dt>Реагенты</dt><dd>${Object.entries(ST.chem[CEBSEL]).map(([r,x])=>r+": "+(x.mode==="dose"?fmt(x.D)+" мг/л":"по pH")).join(" · ")}</dd></dl>
+ <div class="msg warn small">Времена и химические уставки — демо до получения S2; потоки подачи 120 и отмывки 230 л/(м²·ч) — шаблонные рекомендации S2 по заданию, не ограничения всех мембран.</div></div>`;};
+
+/* ============ U7 ============ */
+V.u7=()=>{const total=ST.supercycle.reduce((a,r)=>a+r.n,0);
+ return `<h1>Общий повторяющийся цикл</h1><p class="lead">Все CEB входят в одну последовательность «число полных обычных циклов → следующая программа CEB». Обычный цикл засчитывается после своей BW; отмывки внутри CEB счётчик не увеличивают.</p>
+<div class="grid2"><div class="panel"><div class="tw"><table><thead><tr><th>#</th><th class="n">Обычных циклов C</th><th>Затем программа</th><th></th></tr></thead><tbody>
+${ST.supercycle.map((r,i)=>`<tr><td class="mono">${i+1}</td><td class="n"><input class="num" aria-label="циклов ${i+1}" style="width:70px;text-align:right" value="${r.n}" onchange="scSet(${i},'n',Math.max(1,Math.round(nv(this.value)||1)))"></td><td><select aria-label="программа ${i+1}" onchange="scSet(${i},'ceb',this.value)">${Object.entries(ST.rec.ceb).map(([k,v])=>`<option value="${k}"${r.ceb===k?" selected":""}>${v.name}</option>`).join("")}</select></td><td><button class="rowbtn" type="button" onclick="scMove(${i},-1)" aria-label="вверх">↑</button> <button class="rowbtn" type="button" onclick="scMove(${i},1)" aria-label="вниз">↓</button> <button class="rowbtn" type="button" onclick="scDup(${i})">копия</button> <button class="rowbtn" type="button" onclick="scDel(${i})" ${ST.supercycle.length<2?"disabled":""}>×</button></td></tr>`).join("")}</tbody></table></div>
+ <div class="btns"><button class="btn ghost" type="button" onclick="ST.supercycle.push({n:10,ceb:'CEB2'});markStale();render()">+ строка</button></div></div>
+<div class="calc"><h3>Повтор</h3><p class="mono" style="font-size:13px">${ST.supercycle.map(r=>`${r.n} × C → ${ST.rec.ceb[r.ceb].name.split(" ").slice(0,2).join(" ")}`).join(" → ")} → повтор</p>
+ <dl class="kv"><dt>Обычных циклов за повтор</dt><dd>${total}</dd><dt>Программ CEB за повтор</dt><dd>${ST.supercycle.length}</dd></dl>
+ <p class="footnote">Нет независимых календарей CEB и коэффициента «CEB в сутки»: число событий определяется исполнением последовательности (тест F1). Начальная позиция установок в цикле распределяется равномерно — ${PROP()}.</p></div></div>`;};
+function scSet(i,k,v){ST.supercycle[i][k]=v;markStale();render();}
+function scMove(i,d){const j=i+d;if(j<0||j>=ST.supercycle.length)return;[ST.supercycle[i],ST.supercycle[j]]=[ST.supercycle[j],ST.supercycle[i]];markStale();render();}
+function scDup(i){ST.supercycle.splice(i+1,0,{...ST.supercycle[i]});markStale();render();}
+function scDel(i){ST.supercycle.splice(i,1);markStale();render();}
+
+/* ============ U8 ============ */
+const COL={F:"#3d8fc4",ext:"#1f5f8a",FR:"#7fb6dc",FS:"#7fb6dc",RS:"#9aa7b0",FX:"#9aa7b0",FF:"#5b7f99",FFS:"#9aa7b0",BW:"#7356b5",CEB:"#c2417a",SOAK:"#e6a7c2",RINSE:"#a98bd6",W:"#d4d9dd"};
+V.u8=()=>{const nG=ST.groups.length;
+ return `<h1>Промывные группы, очередь и продление</h1><p class="lead">В группе одна BW-станция: одновременно только одна установка выполняет BW или CEB; блокировка CEB держится на всю программу, включая выдержку.</p>
+<div class="grid2"><div class="panel"><h2>Группы</h2><div class="fields"><div class="f"><label for="ng">Число групп BW</label><select id="ng" onchange="setGroups(+this.value)">${Array.from({length:ST.N},(_,i)=>i+1).map(k=>`<option${k===nG?" selected":""}>${k}</option>`).join("")}</select></div>
+ ${numIn("maxExt",ST.maxExt,{l:"Максимум продления фильтрации",u:"с",hint:"0 — продление выключено"})}</div>
+ <p class="small" style="margin-top:10px">${ST.groups.map((g,i)=>`Группа ${i+1}: ${g.map(x=>"УФ-"+(x+1)).join(", ")}`).join(" · ")}</p>
+ <h3 style="margin-top:14px">Правила алгоритма</h3><ul class="small" style="padding-left:18px;margin:0;display:grid;gap:4px">
+ <li>Очередь по времени заявки; при равенстве — по номеру установки. ${PROP()}</li><li>Станция резервируется логически от начала FF до конца BW (и всей CEB, если она назначена). ${PROP()}</li>
+ <li>В один момент: завершения → заявки → окончания остановов → разрешения → пределы продления. ${PROP()}</li><li>При пределе продления: останов с объёмом на снижении расхода, ожидание без выработки, затем пуск подачи и FF. ${PROP("стадии пуска/останова")}</li>
+ <li>Начальные фазы: смещение k × t_фильтр / n_гр внутри группы; позиции в общем цикле распределены равномерно; проверка конфликтов — на всём горизонте; прогон ${ST.warmup} сут перед отчётным годом. ${PROP()}</li></ul></div>
+<div class="calc">${ST.res?`<h3>Итог периода</h3><dl class="kv"><dt>Время продления (сумма по установкам)</dt><dd>${fmt(ST.res.sum.T.ext/3600,1)} ч</dd><dt>Время ожидания без выработки</dt><dd>${fmt(ST.res.sum.T.wait/3600,1)} ч</dd><dt>Остановов по пределу продления</dt><dd>${fmt(ST.res.sum.T.stops,0)}</dd><dt>Обычных циклов</dt><dd>${fmt(ST.res.sum.T.cycles,0)}</dd></dl><p class="footnote">Потери от ожидания учтены через фактическое время, а не процентом недоступности. Продление — входное допущение, не прогноз устойчивости мембраны.</p>`:'<p class="muted small">Нет расчёта.</p>'}</div></div>
+<div class="panel" style="margin-top:16px"><div style="display:flex;flex-wrap:wrap;gap:12px;align-items:end;margin-bottom:10px"><h2 style="margin:0">Временная диаграмма</h2>
+ <div class="f"><label for="wst">Начало, ч</label><input id="wst" class="num" style="width:70px" value="${ST.win.start}" onchange="ST.win.start=Math.max(0,Math.min(23,nv(this.value)||0));render()"></div>
+ <div class="f"><label for="wln">Окно</label><select id="wln" onchange="ST.win.len=+this.value;render()">${[1,3,6,12,24].map(k=>`<option value="${k}"${k===ST.win.len?" selected":""}>${k} ч</option>`).join("")}</select></div><span class="small muted">Сутки ${ST.detailDay+1} отчётного периода</span></div>
+ ${ST.res?gantt():'<p class="muted small">Нажмите «Рассчитать».</p>'}
+ <div class="legend">${[["F","фильтрация"],["ext","продление"],["FF","FF"],["BW","BW"],["CEB","подача CEB"],["SOAK","выдержка"],["RINSE","отмывка"],["W","ожидание"],["FR","разгон / останов"]].map(([k,l])=>`<span><i style="background:${COL[k]}"></i>${l}</span>`).join("")}</div></div>`;};
+function setGroups(n){const g=Array.from({length:n},()=>[]);for(let i=0;i<ST.N;i++)g[i%n].push(i);ST.groups=g;markStale();render();}
+function gantt(){const D=ST.res.sim.detail,N=ST.N,w0=ST.win.start*3600,w1=w0+ST.win.len*3600;const W=1000,L=70,rowH=22,top=24;const H=top+N*rowH+ST.groups.length*rowH+30;
+ const X=t=>L+(t-w0)/(w1-w0)*(W-L-10);let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Состояния установок во времени">`;
+ const step=ST.win.len<=3?900:ST.win.len<=6?1800:ST.win.len<=12?3600:7200;
+ for(let t=Math.ceil(w0/step)*step;t<=w1;t+=step){s+=`<line x1="${X(t)}" x2="${X(t)}" y1="${top-4}" y2="${H-24}" stroke="var(--line)"/><text x="${X(t)}" y="${top-8}" font-size="10.5" text-anchor="middle" fill="var(--ink2)" font-family="IBM Plex Mono,monospace">${String(Math.floor(t/3600)).padStart(2,"0")}:${String(Math.floor(t%3600/60)).padStart(2,"0")}</text>`;}
+ for(let i=0;i<N;i++){const y=top+i*rowH;s+=`<text x="6" y="${y+15}" font-size="11.5" fill="var(--ink)" font-family="IBM Plex Mono,monospace">УФ-${i+1}</text>`;}
+ D.forEach(x=>{if(x.t1<w0||x.t0>w1)return;const a=Math.max(x.t0,w0),b=Math.min(x.t1,w1);const k=x.tag==="ext"?"ext":x.tag==="wait"?"W":x.kind;const y=top+x.tr*rowH+3;
+  s+=`<rect x="${X(a)}" y="${y}" width="${Math.max(.6,X(b)-X(a))}" height="${rowH-6}" fill="${COL[k]||"#999"}"><title>УФ-${x.tr+1}: ${esc(x.name)}${x.ceb?" ("+x.ceb+")":""} · ${fmt((x.t1-x.t0),0)} с</title></rect>`;});
+ // занятость станций
+ ST.groups.forEach((g,gi)=>{const y=top+N*rowH+gi*rowH+6;s+=`<text x="6" y="${y+13}" font-size="11" fill="var(--ink2)" font-family="IBM Plex Mono,monospace">BW-${gi+1}</text>`;
+  D.filter(x=>g.includes(x.tr)&&["FX","FF","FFS","RS","BW","CEB","SOAK","RINSE"].includes(x.kind)).forEach(x=>{if(x.t1<w0||x.t0>w1)return;const a=Math.max(x.t0,w0),b=Math.min(x.t1,w1);s+=`<rect x="${X(a)}" y="${y+2}" width="${Math.max(.6,X(b)-X(a))}" height="${rowH-8}" fill="var(--ink2)" opacity=".45"/>`;});});
+ s+=`<text x="${L}" y="${H-6}" font-size="10.5" fill="var(--ink2)">Нижние строки — логическая занятость BW-станции группы (от FF до конца BW/CEB).</text></svg>`;return `<div class="ganttwrap">${s}</div>`;}
+
+/* ============ U9 ============ */
+V.u9=()=>{const k1=UFE.kP1(ST.eta1),k2=UFE.kP2(ST.eta1,ST.eta2);const r=ST.res;
+ return `<h1>Источники воды CEB и баланс ОО</h1><p class="lead">Выбранный источник используется для подачи раствора и всех отмывок программы. Предшествующая обычная BW остаётся на ультрафильтрате.</p>
+<div class="grid2"><div class="panel"><h2>Гидравлические выходы ОО</h2><div class="fields">${numIn("eta1",ST.eta1,{l:"η1 — выход ОО-1 (к полному входу с возвратом)",u:"доля",req:1,hint:"0,75 по заданию; 75 % вводится как 0,75"})}${numIn("eta2",ST.eta2,{l:"η2 — выход ОО-2",u:"доля",req:1,hint:"0,90 по заданию"})}</div>
+ <p class="small" style="margin-top:10px">Концентрат ОО-2 полностью возвращается на вход ОО-1; концентрат ОО-1 — в сброс. Схема зафиксирована.</p>
+ <dl class="kv"><dt>k_UF</dt><dd>1</dd><dt>k_P1 = 1/η1</dt><dd>${fmt(k1,10)}</dd><dt>k_P2 = 1/(η1·η2) − (1 − η2)/η2</dt><dd>${fmt(k2,10)}</dd></dl>
+ <div class="msg info small">Источники по программам: ${Object.entries(ST.rec.ceb).map(([k,v])=>`${v.name.split(" ").slice(0,2).join(" ")} — ${v.src}`).join("; ")}. Изменить — на экране U6.</div></div>
+<div class="calc">${r?roBlock(r.sum):'<p class="muted small">Нет расчёта.</p>'}</div></div>`;};
+function roBlock(s){const T=s.T,ro=s.ro;return `<h3>Объёмы за период (${s.days} сут)</h3><div class="tw"><table><thead><tr><th>Источник</th><th class="n">Фактически, м³</th><th class="n">k</th><th class="n">В эквиваленте УФ, м³</th></tr></thead><tbody>
+ <tr><td>Ультрафильтрат (BW + CEB)</td><td class="n">${fmt(T.src.UF,0)}</td><td class="n">1</td><td class="n">${fmt(s.SN.UF,0)}</td></tr>
+ <tr><td>Пермеат ОО-1</td><td class="n">${fmt(T.src.RO1,0)}</td><td class="n">${fmt(UFE.kP1(ST.eta1),4)}</td><td class="n">${fmt(s.SN.RO1eq,0)}</td></tr>
+ <tr><td>Пермеат ОО-2</td><td class="n">${fmt(T.src.RO2,0)}</td><td class="n">${fmt(UFE.kP2(ST.eta1,ST.eta2),4)}</td><td class="n">${fmt(s.SN.RO2eq,0)}</td></tr></tbody></table></div>
+ <dl class="kv" style="margin-top:10px"><dt>Свежий УФ на ОО</dt><dd>${fmt(ro.UF,0)} м³</dd><dt>Сброс концентрата ОО-1</dt><dd>${fmt(ro.C1,0)} м³</dd><dt>Внутренний возврат ОО-2 (не забор, не сток)</dt><dd>${fmt(ro.R2,0)} м³</dd><dt>Проверка баланса ОО</dt><dd>${fmt(ro.check,6)}</dd></dl>
+ <p class="footnote">Qnet — нетто УФ, а не продукта ОО. Достаточность баков пермеата к началу CEB не проверяется.</p>`;}
+
+/* ============ U10 ============ */
+V.u10=()=>{const rows=[];for(const k in ST.chem)for(const r in ST.chem[k])rows.push([k,r,ST.chem[k][r]]);
+ return `<h1>Реагенты CEB и метабисульфит</h1><p class="lead">Доза задаётся по действующему веществу с явной базой либо определяется целевым pH — только по проверенной модели или титрационной зависимости.</p>
+<div class="panel" style="margin-bottom:16px"><h2>Паспорта продуктов (общий справочник, снимок в версии)</h2><div class="tw"><table><thead><tr><th>Код</th><th>Продукт</th><th>База</th><th class="n">w</th><th class="n">ρ, кг/л</th><th class="n">Раб. р-р, г/л</th><th>Статус</th></tr></thead><tbody>
+${Object.entries(ST.products).map(([k,p])=>`<tr><td class="mono">${k}</td><td class="small">${esc(p.name)}</td><td class="small">${p.basis}</td><td class="n"><input aria-label="w ${k}" class="num" style="width:64px;text-align:right" value="${p.w??""}" placeholder="—" onchange="ST.products.${k}.w=nv(this.value);markStale();render()"></td><td class="n"><input aria-label="ρ ${k}" class="num" style="width:64px;text-align:right" value="${p.rho??""}" placeholder="—" onchange="ST.products.${k}.rho=nv(this.value);markStale();render()"></td><td class="n"><input aria-label="C ${k}" class="num" style="width:64px;text-align:right" value="${p.C??""}" placeholder="—" onchange="ST.products.${k}.C=nv(this.value);markStale();render()"></td><td>${isNum(p.w)&&isNum(p.rho)?pill(p.demo?"s-prelim":"s-user",p.demo?"демо-паспорт":"заполнен"):pill("s-nodata","не хватает данных")}</td></tr>`).join("")}</tbody></table></div>
+<p class="footnote">Массовая доля и массовая концентрация не взаимозаменяемы без плотности. NaOCl и активный хлор в пересчёте на Cl₂ не смешиваются: база указывается явно.</p></div>
+<div class="panel" style="margin-bottom:16px"><h2>Дозы по программам CEB</h2><div class="tw"><table><thead><tr><th>Программа</th><th>Реагент</th><th>Способ</th><th class="n">Значение</th><th>Трактовка</th><th>Статус</th></tr></thead><tbody>
+${rows.map(([k,r,c])=>`<tr><td class="small">${ST.rec.ceb[k].name}</td><td class="mono">${r}</td><td><select aria-label="способ ${k} ${r}" onchange="ST.chem['${k}']['${r}'].mode=this.value;markStale();render()"><option value="dose"${c.mode==="dose"?" selected":""}>заданная доза</option><option value="pH"${c.mode==="pH"?" selected":""}>целевой pH</option></select></td>
+ <td class="n">${c.mode==="dose"?`<input aria-label="доза" class="num" style="width:70px;text-align:right" value="${c.D??""}" onchange="ST.chem['${k}']['${r}'].D=nv(this.value);markStale();render()"> мг/л`:`pH <input aria-label="pH" class="num" style="width:50px;text-align:right" value="${c.pH??""}" onchange="ST.chem['${k}']['${r}'].pH=nv(this.value);render()">`}</td>
+ <td class="small">${c.mode==="dose"?`<select aria-label="трактовка" onchange="ST.chem['${k}']['${r}'].basis=this.value;render()"><option value="add"${c.basis==="add"?" selected":""}>добавить X мг/л</option><option value="final"${c.basis==="final"?" selected":""}>получить конечные X мг/л</option></select>`:"—"}</td>
+ <td>${c.mode==="pH"?pill("s-nodata","доза по pH не определена"):c.basis==="final"?pill("s-nodata","нужна концентрация в исходной воде"):pill("s-prelim","демо-доза")}</td></tr>`).join("")}</tbody></table></div>
+${rows.some(x=>x[2].mode==="pH")?`<div class="msg bad"><b>Автоматическая доза по pH не определена.</b> Для пары «вода — реагент» нет проверенной модели или титрационной кривой (U-11). Недостающие данные: анализ источника CEB (ультрафильтрат), pH, температура, щёлочность с базой единиц, CO₂ / карбонатная система, Ca/Mg; для совместной подачи с NaOCl — данные раствора гипохлорита. Реагент в режиме pH не рассчитывается; гидравлический баланс от этого не меняется.
+ <div class="btns" style="margin-top:8px">${rows.filter(x=>x[2].mode==="pH").map(([k,r])=>`<button class="btn ghost" type="button" onclick="ST.chem['${k}']['${r}'].mode='dose';markStale();render()">Перейти к заданной дозе: ${r}, ${ST.rec.ceb[k].name.split(" ").slice(0,2).join(" ")} (целевой pH сохранится)</button>`).join("")}</div></div>`:""}</div>
+<div class="grid2"><div class="panel"><h2>Хлорсодержащие стоки: метабисульфит</h2>
+ <div class="seg"><label><input type="radio" name="mbs" ${ST.mbs.mode==="manual"?"checked":""} onchange="ST.mbs.mode='manual';render()">Ручная доза на объём стока</label><label><input type="radio" name="mbs" ${ST.mbs.mode==="auto"?"checked":""} onchange="ST.mbs.mode='auto';render()">По остаточному хлору</label></div>
+ ${ST.mbs.mode==="manual"?`<div class="fields" style="margin-top:12px">${numIn("mbs.D",ST.mbs.D,{l:"Доза Na₂S₂O₅ на объём хлорсодержащего стока",u:"мг/л",hint:"нет значения по умолчанию"})}</div>
+  ${ST.res?`<dl class="kv" style="margin-top:10px"><dt>Хлорсодержащие стоки за период</dt><dd>${fmt(ST.res.sum.T.drain.drain_chem_cl||0,1)} м³</dd><dt>Na₂S₂O₅ за период</dt><dd>${isNum(ST.mbs.D)?fmt((ST.res.sum.T.drain.drain_chem_cl||0)*ST.mbs.D/1000,1)+" кг":"не рассчитан: доза не задана"}</dd><dt>Максимальная подача дозатора</dt><dd>не определена: нет временного профиля обработки</dd></dl>`:""}`:
+ `<div class="msg bad small" style="margin-top:12px">Методика не подтверждена: коэффициент стехиометрии и запаса не заданы источником (U-13). Нужны: остаточный активный хлор с базой выражения, объём/расход стока, методика, концентрация рабочего раствора. Остаточный хлор не принимается равным концентрации CEB.</div>`}
+ <p class="footnote">Кислотные и хлорсодержащие стоки не смешиваются до подтверждённого обезвреживания (S2 §6.1 по заданию). Организация дозирования метабисульфита — ${PROP("отдельный узел, число агрегатов не задано")}.</p></div>
+<div class="calc">${ST.res?chemTable():'<p class="muted small">Нет расчёта.</p>'}</div></div>`;};
+function chemTable(){const s=ST.res.sum,T=s.T;const per={};for(const k in T.chem){const [g,r]=k.split("|");per[r]=(per[r]||0)+T.chem[k];}
+ const dayAvg=v=>v/s.days;const Vnet=s.Vnet;
+ return `<h3>Расход реагентов за период ${s.days} сут</h3><div class="tw"><table><thead><tr><th>Реагент</th><th class="n">Действ., кг</th><th class="n">Товарный, кг</th><th class="n">Товарный, л</th><th class="n">кг/сут ср.</th><th class="n">кг/м³ Qnet</th></tr></thead><tbody>
+ ${["NaOH","NaOCl","HCl"].map(r=>{const p=ST.products[r];const a=per[r];if(!isNum(a)){const pH=Object.values(ST.chem).some(c=>c[r]&&c[r].mode==="pH");return `<tr><td class="mono">${r}</td><td colspan="5" class="small">${pH?"не рассчитан: доза по pH не определена":"не используется в общем цикле"}</td></tr>`;}
+  const c=isNum(p.w)?a/p.w:NaN,l=isNum(c)&&isNum(p.rho)?c/p.rho:NaN;return `<tr><td class="mono">${r}</td><td class="n">${fmt(a,1)}</td><td class="n">${isNum(c)?fmt(c,1):"нет w"}</td><td class="n">${isNum(l)?fmt(l,1):"—"}</td><td class="n">${fmt(dayAvg(a),2)}</td><td class="n">${Vnet>0?fmt(a/Vnet,5):"не опр."}</td></tr>`;}).join("")}</tbody></table></div>
+ <p class="footnote">Удельный расход — отношение масс к нетто-объёму того же периода, а не среднее суточных отношений.</p>`;}
+
+/* ============ U11 ============ */
+V.u11=()=>{const r=ST.res;const fp=ST.pumps.feed,bp=ST.pumps.bw;const hf=UFE.head({...fp,dp_membrane_bar:fp.tmp}),hb=UFE.head({...bp,dp_membrane_bar:bp.tmp});
+ const pb=(key,p,h,title,Qtxt)=>`<div class="panel"><h2>${title}</h2>${Qtxt}
+ <div class="seg" style="margin:10px 0"><label><input type="radio" name="hm${key}" ${p.mode==="set"?"checked":""} onchange="ST.pumps.${key}.mode='set';render()">Задать напор</label><label><input type="radio" name="hm${key}" ${p.mode==="calc"?"checked":""} onchange="ST.pumps.${key}.mode='calc';render()">Рассчитать напор</label></div>
+ ${p.mode==="set"?`<div class="fields">${numIn("pumps."+key+".Hset",p.Hset,{l:"Требуемый напор",u:"м"})}<div class="f"><label for="hb${key}">Основание</label><input id="hb${key}" value="${esc(p.Hbasis)}" onchange="ST.pumps.${key}.Hbasis=this.value"></div></div>`:
+ `<div class="fields">${numIn("pumps."+key+".p_in",p.p_in,{l:"p на входе (точка: всасывание)",u:"бар изб."})}${numIn("pumps."+key+".p_out",p.p_out,{l:"p на выходе (точка: приёмник)",u:"бар изб."})}${numIn("pumps."+key+".z_in",p.z_in,{l:"Отметка входа",u:"м"})}${numIn("pumps."+key+".z_out",p.z_out,{l:"Отметка выхода",u:"м"})}${numIn("pumps."+key+".h_loss",p.h_loss,{l:"Потери вне мембраны",u:"м"})}${numIn("pumps."+key+".tmp",p.tmp,{l:key==="feed"?"TMP фильтрации":"TMP BW",u:"бар",hint:"уставка заказчика, редактируемая"})}</div>
+ <div class="formula">H = (p_out − p_in)/(ρ·g) + (z_out − z_in) + h_потерь + ΔP_мембр/(ρ·g)</div>
+ ${h.complete?`<dl class="kv"><dt>H</dt><dd>${fmt(h.H,1)} м</dd><dt>из них TMP</dt><dd>${fmt(h.parts.membrane,1)} м</dd></dl>`:`<div class="msg warn small">Напор не завершён. Не заданы: ${h.miss.join(", ")}. Нулевые значения допустимы только как явный ввод.</div>`}`}
+ <p class="footnote">Если граничное давление уже включает давление перед мембраной, TMP не прибавляется повторно. Для FF используется потеря пути FF, а не TMP.</p></div>`;
+ return `<h1>Насосные станции и дозаторы</h1><p class="lead">Требуемые выходы — расход и напор. Марки, кривые, двигатели и резервные агрегаты не подбираются.</p>
+<div class="grid2">${pb("feed",fp,hf,"Станция исходной воды (общая)",r?`<dl class="kv"><dt>Диапазон по расписанию</dt><dd>${fmt(r.sum.feedMin,1)}–${fmt(r.sum.feedMax,1)} м³/ч</dd><dt>N установок фильтруют одновременно</dt><dd>${fmt(r.sum.Q1N,1)} м³/ч</dd><dt>Q2 — средний забор</dt><dd>${fmt(r.sum.Q2,1)} м³/ч</dd></dl><p class="footnote">Не умножается на N + X; Qnet и Q2 не заменяют мгновенный расход. Проектный максимум и запас выбираются явно.</p>`:"")}
+${pb("bw",bp,hb,"BW-станция группы",r?`<dl class="kv">${r.sum.bwMax.map((q,i)=>`<dt>Группа ${i+1}: максимум (BW / CEB / отмывка)</dt><dd>${fmt(q,1)} м³/ч</dd>`).join("")}</dl><p class="footnote">CEB на пермеате ОО использует тот же насос; напор считается для каждого применяемого источника.</p>`:"")}</div>
+<div class="panel" style="margin-top:16px"><h2>Дозирующие комплекты CEB (на каждую группу)</h2>${r?dosTable():'<p class="muted small">Нет расчёта.</p>'}</div>`;};
+function dosTable(){const dm=ST.res.sim.dosingMax;const rows=[];for(const g in dm)for(const r in dm[g])rows.push([+g,r,dm[g][r]]);
+ return `<div class="tw"><table><thead><tr><th>Группа</th><th>Реагент</th><th class="n">Макс. действ., кг/ч</th><th class="n">Товарный, л/ч</th><th class="n">Рабочий р-р, л/ч</th><th>Давление ввода</th></tr></thead><tbody>
+ ${rows.map(([g,r,kg])=>{const p=ST.products[r];const lc=isNum(p.w)&&isNum(p.rho)?kg/p.w/p.rho:NaN;const lw=isNum(p.C)?kg*1000/p.C:NaN;return `<tr><td>${g+1}</td><td class="mono">${r}</td><td class="n">${fmt(kg,2)}</td><td class="n">${isNum(lc)?fmt(lc,1):"нет паспорта"}</td><td class="n">${isNum(lw)?fmt(lw,1):"C не задана"}</td><td class="small">не задано — требование не завершено</td></tr>`;}).join("")}</tbody></table></div>
+ <p class="footnote">Максимальная подача — по максимуму фактической химической подачи в событии, без деления суточного расхода на 24. Запас — только явно заданный. Резервные дозаторы не добавляются.</p>`;}
+
+/* ============ U12 ============ */
+V.u12=()=>{const r=ST.res;if(!r)return `<h1>Результаты</h1><div class="msg info">Нажмите «Рассчитать» вверху: выполнится годовое моделирование ${ST.N} установок.</div>`;const s=r.sum;
+ return `<div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;align-items:flex-end"><div><div class="eyebrow">UF-0001 · черновик · ядро ${r.sim.engine} · ${s.days} сут + прогон ${ST.warmup} сут · ДЕМО</div><h1>Результаты</h1></div></div>
+<div class="statusrow" style="margin:6px 0 18px">${pill("s-balance","Гидравлический расчёт выполнен")}${pill("s-clarify","Рекомендация J отсутствует")}${Object.values(ST.chem).some(c=>Object.values(c).some(x=>x.mode==="pH"))?pill("s-nodata","pH-методика отсутствует"):""}${!isNum(ST.products.NaOCl.w)?pill("s-clarify","Часть реагентов не рассчитана"):""}${!UFE.head({...ST.pumps.feed,dp_membrane_bar:1.5}).complete?pill("s-clarify","Напор не завершён"):""}${pill("s-clarify","Схема требует инженерной проверки")}</div>
+<div class="cards">
+ <div class="kcard"><div class="k">Q1 · ИСХОДНАЯ ВОДА ПРИ ФИЛЬТРАЦИИ</div><div class="v">${fmt(s.Q1N,1)}</div><div class="u">м³/ч на ${ST.N} установки</div><div class="d">${fmt(s.Q1unit,1)} м³/ч на одну установку при J = ${fmt(r.J,2)} л/(м²·ч)</div></div>
+ <div class="kcard"><div class="k">Q2 · СРЕДНИЙ ЗАБОР ИСХОДНОЙ ВОДЫ</div><div class="v">${fmt(s.Q2,1)}</div><div class="u">м³/ч за период</div><div class="d">из них только фильтрация ${fmt(s.Q2filt,1)} м³/ч; FF и пуски ${fmt(s.Q2-s.Q2filt,2)} м³/ч</div></div>
+ <div class="kcard" style="border-color:var(--accent)"><div class="k">QNET · ПОЛЕЗНАЯ ПРОИЗВОДИТЕЛЬНОСТЬ УФ</div><div class="v">${fmt(s.Qnet,1)}</div><div class="u">м³/ч среднегодовая</div><div class="d">${fmt(s.Vnet/s.days,0)} м³/сут в среднем; сутки от ${fmt(s.dayNetMin,0)} до ${fmt(s.dayNetMax,0)}</div></div></div>
+<div class="grid2" style="margin-top:20px"><div class="panel"><h2>Компоновка</h2><dl class="kv"><dt>Установки</dt><dd>${ST.N} раб. + ${ST.X} рез.</dd><dt>Модулей в установке</dt><dd>${ST.m} × ${fmt(ST.a)} м²</dd><dt>A_work / A_installed</dt><dd>${fmt(ST.N*A_unit(),0)} / ${fmt((ST.N+ST.X)*A_unit(),0)} м²</dd><dt>Группы BW</dt><dd>${ST.groups.length}</dd><dt>J принятый</dt><dd>${fmt(r.J,2)} л/(м²·ч)</dd></dl></div>
+ <div class="panel"><h2>Собственные нужды за период</h2><dl class="kv"><dt>Произведено УФ</dt><dd>${fmt(s.T.uf,0)} м³</dd><dt>BW ультрафильтратом</dt><dd>${fmt(s.T.bw,0)} м³</dd><dt>CEB, приведено к УФ</dt><dd>${fmt(s.SN.UF-s.T.bw+s.SN.RO1eq+s.SN.RO2eq,0)} м³</dd><dt>Нетто УФ</dt><dd>${fmt(s.Vnet,0)} м³</dd><dt>FF (исходная вода в сток)</dt><dd>${fmt(s.T.ff,0)} м³</dd><dt>Ожидание / продление</dt><dd>${fmt(s.T.wait/3600,0)} / ${fmt(s.T.ext/3600,0)} ч</dd></dl></div></div>
+<div class="panel" style="margin-top:20px"><h2>Суточная выработка нетто за период</h2>${dayChart(s)}<p class="footnote">Год не равен первым суткам × 365: суточные значения различаются из-за положения CEB и очередей. CIP, ремонты, тесты целостности и переходы на резерв исключены.</p></div>
+<div class="grid2" style="margin-top:20px"><div class="panel"><h2>Стоки за период</h2><dl class="kv">${Object.entries(s.T.drain).map(([k,v])=>`<dt>${DRAIN[k]||k}</dt><dd>${fmt(v,0)} м³</dd>`).join("")}</dl></div>
+ <div class="panel"><h2>Журнал событий (фрагмент)</h2><div class="tw" style="max-height:220px;overflow:auto"><table><thead><tr><th>Время</th><th>Установка</th><th>Событие</th><th class="n">Ожидание, с</th></tr></thead><tbody>${r.sim.log.slice(0,60).map(e=>`<tr><td class="mono small">с${Math.floor(e.t/86400)-ST.warmup+1} ${String(Math.floor(e.t%86400/3600)).padStart(2,"0")}:${String(Math.floor(e.t%3600/60)).padStart(2,"0")}</td><td>УФ-${e.tr+1}</td><td class="small">${e.ceb?"BW + "+e.ceb:"FF + BW"}</td><td class="n">${fmt(e.wait,0)}</td></tr>`).join("")}</tbody></table></div></div></div>`;};
+function dayChart(s){const d=s.daily.map(x=>x.net);const W=1000,H=200,L=60,B=24;const mn=Math.min(...d),mx=Math.max(...d);const pad=(mx-mn)*0.15||1;const lo=mn-pad,hi=mx+pad;
+ const X=i=>L+i/(d.length-1||1)*(W-L-10),Y=v=>10+(hi-v)/(hi-lo)*(H-B-10);let p=d.map((v,i)=>`${i?"L":"M"}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`).join("");
+ const ticks=[lo+pad,(lo+hi)/2,hi-pad];return `<div class="ganttwrap"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Суточная нетто-выработка">${ticks.map(t=>`<line x1="${L}" x2="${W-10}" y1="${Y(t)}" y2="${Y(t)}" stroke="var(--line)"/><text x="${L-6}" y="${Y(t)+4}" font-size="10.5" text-anchor="end" fill="var(--ink2)" font-family="IBM Plex Mono,monospace">${fmt(t,0)}</text>`).join("")}
+ <path d="${p}" fill="none" stroke="var(--accent)" stroke-width="1.6"/><text x="${L}" y="${H-6}" font-size="10.5" fill="var(--ink2)">сутки 1</text><text x="${W-10}" y="${H-6}" font-size="10.5" text-anchor="end" fill="var(--ink2)">сутки ${d.length}</text><text x="${L+4}" y="20" font-size="10.5" fill="var(--ink2)">м³/сут нетто</text></svg></div>`;}
+
+/* ============ U13 ============ */
+V.u13=()=>{const r=ST.res;if(!r)return `<h1>ТКП, схема и записка</h1><div class="msg info">Нужен расчёт.</div>`;const s=r.sum;
+ return `<h1>ТКП, предварительная схема и записка</h1><p class="lead">Оба уровня строятся из одного снимка расчёта. Документы и экспорт доступны после регистрации; сейчас — предпросмотр.</p>
+<div class="panel" style="margin-bottom:20px"><div class="eyebrow">Уровень 1 · первичный расчёт для ТКП · ДЕМО</div><h2>УФ-система ${ST.N}+${ST.X} · Qnet ${fmt(s.Qnet,0)} м³/ч</h2>
+ <div class="cards" style="margin:12px 0"><div class="kcard"><div class="k">Q1</div><div class="v">${fmt(s.Q1N,0)}</div><div class="u">м³/ч</div></div><div class="kcard"><div class="k">Q2</div><div class="v">${fmt(s.Q2,0)}</div><div class="u">м³/ч</div></div><div class="kcard"><div class="k">QNET</div><div class="v">${fmt(s.Qnet,0)}</div><div class="u">м³/ч</div></div><div class="kcard"><div class="k">ПЛОЩАДЬ</div><div class="v">${fmt(ST.N*A_unit(),0)}</div><div class="u">м² рабочая · ${ST.N*ST.m} модулей</div></div></div>
+ <p class="small muted">Технические данные для предложения; стоимость и коммерческие условия не рассчитываются.</p></div>
+<div class="panel" style="margin-bottom:20px"><div class="eyebrow">Уровень 2 · предварительная принципиальная схема</div>${scheme(s)}
+ <div class="msg warn small">Предварительная схема. Функциональные станции и внутренние ID, без проектных позиций, DN/PN, КИПиА и клапанной матрицы. Требует инженерной проверки.</div></div>
+<div class="panel"><div class="eyebrow">Уровень 2 · пояснительная записка (DOCX) — состав</div><ol class="small" style="padding-left:20px;display:grid;gap:5px;margin:0">
+ <li>Назначение и границы расчёта — N рабочих установок, FF/BW/CEB; CIP, ремонты и резерв исключены.</li><li>Исходные данные и происхождение качества воды — исходная (демо), перед УФ: неизвестно.</li>
+ <li>Компоновка ${ST.N}+${ST.X}: ${ST.m} × ${fmt(ST.a)} м², A_work ${fmt(ST.N*A_unit(),0)} м².</li><li>J: рекомендация отсутствует; принят ${fmt(ST.J0)}; после компоновки ${fmt(r.J,2)} л/(м²·ч).</li>
+ <li>Обычный цикл, ${Object.keys(ST.rec.ceb).length} программ CEB, общий цикл: ${ST.supercycle.map(x=>x.n+"C→"+x.ceb).join(", ")}.</li><li>Группы BW: ${ST.groups.length}; продление до ${ST.maxExt} с; ожидание ${fmt(s.T.wait/3600,0)} ч за период.</li>
+ <li>Q1 ${fmt(s.Q1N,1)}, Q2 ${fmt(s.Q2,1)}, Qnet ${fmt(s.Qnet,1)} м³/ч; баланс ОО.</li><li>Станции: исходная вода ${fmt(s.feedMin,0)}–${fmt(s.feedMax,0)} м³/ч; BW ${s.bwMax.map(q=>fmt(q,0)).join(" / ")} м³/ч; напор — ${UFE.head({...ST.pumps.feed,dp_membrane_bar:1.5}).complete?"рассчитан":"не завершён"}.</li>
+ <li>Реагенты и pH-методика — ${Object.values(ST.chem).some(c=>Object.values(c).some(x=>x.mode==="pH"))?"доза по pH не определена для части реагентов":"заданные дозы"}.</li><li>Метабисульфит — ${isNum(ST.mbs.D)?"ручная доза":"не рассчитан"}.</li><li>Требования к внешним подключениям.</li><li>Ссылка на файл схемы.</li><li>Функциональное оборудование.</li><li>Допущения, предупреждения, неполные данные, версии методик.</li></ol>
+ <div class="btns"><button class="btn" type="button" disabled>DOCX — после регистрации</button><button class="btn ghost" type="button" disabled>PDF схемы — после регистрации</button><button class="btn ghost" type="button" disabled>Excel — после регистрации</button></div></div>`;};
+function scheme(s){const W=1100,H=480;const box=(x,y,w,h,t1,t2,dash,col)=>`<g><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="5" fill="var(--sheet)" stroke="${col||"var(--ink2)"}" stroke-width="1.5" ${dash?'stroke-dasharray="6 4"':""}/>${t1?`<text x="${x+w/2}" y="${y+h/2-(t2?3:-4)}" text-anchor="middle" font-size="12" font-weight="600" fill="var(--ink)">${t1}</text>`:""}${t2?`<text x="${x+w/2}" y="${y+h/2+13}" text-anchor="middle" font-size="10.5" fill="var(--ink2)">${t2}</text>`:""}</g>`;
+ const ar=(d,c,dash)=>`<path d="${d}" fill="none" stroke="${c}" stroke-width="2" ${dash?'stroke-dasharray="5 4"':""} marker-end="url(#sa)"/>`;
+ let o=`<div class="ganttwrap"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Предварительная принципиальная схема УФ-системы"><defs><marker id="sa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--ink2)"/></marker></defs>`;
+ o+=box(10,50,120,50,"Бак исходной воды","внешний объект",true)+ar("M130 75 H158","var(--ink2)")+box(160,45,140,60,"Станция исх. воды","общая · "+fmt(s.feedMin,0)+"–"+fmt(s.feedMax,0)+" м³/ч")+ar("M300 75 H328","var(--ink2)")+box(330,45,130,60,"Узел коагуляции","необязательный")+ar("M460 75 H488","var(--ink2)");
+ const nb=Math.min(ST.N,4);for(let i=nb-1;i>=0;i--)o+=box(490+i*7,45-i*7,180,60,i===0?`УФ-установки × ${ST.N}`:"",i===0?`${ST.m} мод. × ${fmt(ST.a)} м² · гр. BW: ${ST.groups.length}`:"");
+ o+=box(700,125,160,44,`Резерв × ${ST.X}`,"не в выработке и промывках",true);
+ o+=ar("M670 75 H878","var(--accent)")+`<text x="770" y="67" font-size="10.5" text-anchor="middle" fill="var(--ink2)">ультрафильтрат</text>`+box(880,45,130,60,"Бак УФ","внешний объект",true)+ar("M1010 75 H1088","var(--accent)")+`<text x="1090" y="98" font-size="10.5" fill="var(--ink2)" text-anchor="end">потребитель / ОО</text>`;
+ const y=230;o+=box(500,y,170,56,"BW-станция гр. 1"+(ST.groups.length>1?` (и ещё ${ST.groups.length-1})`:""),"одна установка за раз")+ar(`M585 ${y} V112`,"var(--bw)");
+ o+=box(860,y-4,220,64,"Всасывание BW","бак УФ / баки пермеата ОО-1, ОО-2",true)+ar(`M860 ${y+28} H672`,"var(--bw)",true)+`<text x="766" y="${y+20}" font-size="10.5" text-anchor="middle" fill="var(--ink2)">источник по программе</text>`;
+ o+=box(690,y+80,170,50,"Дозаторы CEB гр. 1","NaOH · NaOCl · кислота",false,"var(--chem)")+ar(`M775 ${y+80} V${y+31}`,"var(--chem)",true);
+ const dy=405;[["FF / BW",10],["Щелочные",160],["Кислотные",310],["Хлорсодержащие",460]].forEach(([l,x])=>{o+=box(x,dy,130,44,l,"сборник, внешний",true);});
+ o+=box(640,dy,190,44,"Метабисульфит","узел · параметры уточнить",false,"var(--chem)")+ar(`M590 ${dy+22} H638`,"var(--chem)",true);
+ o+=`<path d="M490 112 V122 H75 V${dy-2}" fill="none" stroke="var(--ink2)" stroke-width="1.4" stroke-dasharray="3 3"/><text x="82" y="${dy-12}" font-size="10.5" fill="var(--ink2)">отдельные маршруты стоков; кислотные и хлорсодержащие не смешиваются</text>`;
+ o+=`<text x="10" y="${H-8}" font-size="10.5" fill="var(--ink2)">ПРЕДВАРИТЕЛЬНО · функциональная схема из модели оборудования · ID внутренние · без DN/PN и КИПиА</text></svg></div>`;return o;}
+
+/* ============ тесты ============ */
+V.tests=()=>{const R=UFTests.run(UFE,UFT);const ok=R.filter(x=>x.pass).length;
+ return `<h1>Тесты расчётного ядра</h1><p class="lead">Запускаются в этом браузере при открытии экрана: численные проверки §24.1 и часть функциональных §24.2. Результат: ${ok} из ${R.length} пройдено.</p>
+<div class="panel tw"><table><thead><tr><th>ID</th><th>Проверка</th><th>Результат</th><th></th></tr></thead><tbody>${R.map(r=>`<tr><td class="mono">${r.id}</td><td>${r.name}</td><td class="mono small">${esc(r.detail)}</td><td>${r.pass?pill("s-balance","пройден"):pill("s-nodata","не пройден")}</td></tr>`).join("")}</tbody></table></div>
+<p class="footnote">Тест D — синтетический цикл с условными входами, не эталон годовой выработки. Допуск численных проверок 1·10⁻⁹; баланса периода — 10⁻⁶ от объёма.</p>`;};
+
+window.addEventListener("hashchange",route);
+route();recalc();
+</script>

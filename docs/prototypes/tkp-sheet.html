@@ -1,0 +1,189 @@
+<title>Лист ТКП: коагуляция и УФ</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: one A4-landscape sheet on a drafting-table ground; process drawing on top, data strip and title block below. Single deliberate look (paper on slate) in both themes. */
+:root{
+  --ground:#2b3238; --paper:#ffffff; --ink:#1b252c; --ink2:#5b6a74; --rule:#c9d3d9; --tint:#f2f6f8;
+  --raw:#5b7f99; --coag:#a07a3c; --filt:#1e9bd0; --bw:#7356b5; --chem:#c2417a; --reag:#e07b24; --ph:#3c9a5f; --waste:#8a8178; --steel:#6f7f8a; --accent:#0b6e8a;
+  --f-d:"IBM Plex Sans Condensed","Arial Narrow",sans-serif; --f-b:"IBM Plex Sans",system-ui,sans-serif; --f-m:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:#e9eef1;font-family:var(--f-b);margin:0;padding-block:20px 40px;padding-inline:16px}
+.bar{max-width:1400px;margin:0 auto 14px;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center}
+.bar h1{font:600 18px var(--f-d);margin:0;letter-spacing:.01em}
+.flag{font:500 11px var(--f-m);letter-spacing:.08em;color:#d9cdf5;border:1px solid #9f86de;background:#3a3150;padding:3px 9px;border-radius:3px}
+.bar p{margin:0;font-size:13px;color:#b8c4cb;flex-basis:100%}
+.sheetwrap{max-width:1400px;margin:0 auto;overflow-x:auto;border-radius:3px;box-shadow:0 12px 40px rgba(0,0,0,.35)}
+svg.sheet{display:block;width:100%;min-width:1040px;height:auto;background:var(--paper)}
+svg text{font-family:var(--f-b)}
+.t-title{font:700 27px var(--f-d);fill:var(--ink)}
+.t-h{font:600 15px var(--f-d);fill:var(--ink);letter-spacing:.02em}
+.t-cap{font:600 10.5px var(--f-m);fill:var(--ink2);letter-spacing:.12em}
+.t-lbl{font:400 12px var(--f-b);fill:var(--ink2)}
+.t-val{font:500 12.5px var(--f-m);fill:var(--ink)}
+.t-big{font:600 26px var(--f-m);fill:var(--ink)}
+.t-unit{font:400 11.5px var(--f-m);fill:var(--ink2)}
+.t-tag{font:600 11px var(--f-m);fill:var(--ink)}
+.t-sm{font:400 10.5px var(--f-b);fill:var(--ink2)}
+.t-zone{font:700 13px var(--f-d);letter-spacing:.14em}
+.t-pend{font:italic 400 11.5px var(--f-b);fill:#9a8a6a}
+</style>
+
+<div class="bar">
+  <h1>Лист ТКП · Коагуляция и ультрафильтрация</h1><span class="flag">ДЕМО-ДАННЫЕ</span>
+  <p>Числа по узлу коагуляции — из демо-версии расчёта (ПОХА). Узел УФ показан схемно; его параметры появятся после расчёта УФ.</p>
+</div>
+<div class="sheetwrap"><svg class="sheet" id="sheet" viewBox="0 0 1400 990" role="img" aria-label="Лист ТКП: узел непосредственной коагуляции и узел ультрафильтрации"></svg></div>
+
+<script>
+"use strict";
+/* --- данные листа: берутся из сохранённой версии расчёта (здесь — демо RC-0001 в.1) --- */
+const D={
+ project:"ДЕМО — Водоподготовка, линия 1", customer:"Демо-объект (вымышленный)", calc:"RC-0001 · в.1", date:"10.10.2026",
+ Q:{min:40,nom:120,max:120}, trains:3, qTrain:40,
+ water:[["pH","7,4",""],["Щёлочность","2,1","мг-экв/л"],["Температура","8","°C"],["Мутность","6","NTU"],["Цветность","35","град."],["Перманг. окисляемость","6,8","мг O₂/л"],["Взвешенные вещества","8","мг/л"]],
+ req:[["SDI15","≤ 3"],["Остаточный Al","≤ 0,2 мг/л"],["ПО фильтрата","≤ 3 мг O₂/л"]],
+ coag:{reag:"ПОХА (PACl)",prod:"17 % по Al₂O₃",dose:"2,5",doseR:"1,5–4,0",prodKg:"3,33",prodL:"2,43",work:"56,7",pump:"11–91",turn:"1:8",p:"3,0",ct:"2 × 2,0",t:"60",tMin:"180",pipe:"168",vMin:"0,5"},
+ uf:[["Рабочих установок",null,"3 (демо)"],["Подача на одну установку",null,"40 м³/ч (демо)"],["Мембрана / модуль",null],["Модулей на установку",null],["Площадь мембран","м²"],["Удельный поток","л/(м²·ч)"],["Поток фильтрата","м³/ч"],["Выход по воде","%"],["Обратная промывка (BW)","м³/ч"]]
+};
+const S=document.getElementById("sheet"); let o="";
+const add=s=>o+=s;
+const T=(x,y,cls,txt,a="start")=>`<text x="${x}" y="${y}" class="${cls}" text-anchor="${a}">${txt}</text>`;
+
+/* defs: градиенты для объёма модулей и ёмкостей, маркеры потоков */
+add(`<defs>
+ <linearGradient id="cyl" x1="0" x2="1"><stop offset="0" stop-color="#cfd8de"/><stop offset=".35" stop-color="#ffffff"/><stop offset=".7" stop-color="#e3e9ed"/><stop offset="1" stop-color="#b9c5cc"/></linearGradient>
+ <linearGradient id="tankg" x1="0" x2="1"><stop offset="0" stop-color="#e6ecef"/><stop offset=".4" stop-color="#ffffff"/><stop offset="1" stop-color="#d7e0e5"/></linearGradient>
+ <linearGradient id="waterg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b9d9e8"/><stop offset="1" stop-color="#8fbfd6"/></linearGradient>
+ <linearGradient id="coagg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d9c7a2"/><stop offset="1" stop-color="#bfa36f"/></linearGradient>
+ <linearGradient id="filtg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c6ebf8"/><stop offset="1" stop-color="#8fd3ee"/></linearGradient>
+ <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#c9d3d9" stroke-width="2"/></pattern>
+ ${["raw","coag","filt","bw","chem","reag","ph","waste"].map(k=>`<marker id="m-${k}" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M1 1L9 5L1 9z" fill="var(--${k})"/></marker>`).join("")}
+</defs>`);
+
+/* рамка листа */
+add(`<rect x="14" y="14" width="1372" height="962" fill="none" stroke="var(--ink)" stroke-width="1.6"/>`);
+
+/* шапка */
+add(T(40,62,"t-cap","ТЕХНИКО-КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ · ПРИЛОЖЕНИЕ · ТЕХНОЛОГИЧЕСКАЯ СХЕМА"));
+add(T(40,98,"t-title","Узел непосредственной коагуляции и ультрафильтрации"));
+add(T(40,122,"t-lbl",`${D.project} · ${D.customer}`));
+/* ключевые цифры справа в шапке */
+const kp=[["Q расчётный",`${D.Q.nom}`,"м³/ч"],["Диапазон Q",`${D.Q.min}–${D.Q.max}`,`м³/ч · 1–${D.trains} уст.`],["Коагулянт","ПОХА","Al(III)"]];
+kp.forEach((k,i)=>{const x=1000+i*126; add(`<line x1="${x-14}" y1="46" x2="${x-14}" y2="124" stroke="var(--rule)"/>`+T(x,62,"t-cap",k[0].toUpperCase())+T(x,100,"t-big",k[1])+T(x,120,"t-unit",k[2]));});
+add(`<line x1="28" y1="140" x2="1372" y2="140" stroke="var(--ink)" stroke-width="1.2"/>`);
+
+/* зоны */
+const zone=(x,w,lbl,col,sub,sub2)=>`<rect x="${x}" y="160" width="${w}" height="420" rx="6" fill="${col}" fill-opacity=".05" stroke="${col}" stroke-opacity=".45" stroke-dasharray="6 5"/>`+`<text x="${x+14}" y="184" class="t-zone" fill="${col}">${lbl}</text>`+T(x+14,201,"t-sm",sub)+(sub2?T(x+14,215,"t-sm",sub2):"");
+add(zone(40,198,"ПОДАЧА","var(--raw)","предфильтр и насос —","до ввода реагентов"));
+add(zone(250,610,"УЗЕЛ КОАГУЛЯЦИИ","var(--coag)","коррекция pH · ввод коагулянта · смешение · контакт"));
+add(zone(872,490,"УЗЕЛ УЛЬТРАФИЛЬТРАЦИИ","var(--filt)","стойки УФ · промывки · фильтрат"));
+add(`<line x1="40" y1="540" x2="1362" y2="540" stroke="var(--ink)" stroke-width="1.2"/><rect x="40" y="540" width="1322" height="8" fill="url(#hatch)"/>`);
+/* трубы: внешний контур + светлая сердцевина, дающие "полую" трубу */
+const pipe=(d,k,w=9,dash="")=>`<path d="${d}" fill="none" stroke="var(--${k})" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round" ${dash?`stroke-dasharray="${dash}"`:""}/><path d="${d}" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="${w*0.38}" stroke-linejoin="round" stroke-linecap="round" ${dash?`stroke-dasharray="${dash}"`:""}/>`;
+const thin=(d,k,dash="")=>`<path d="${d}" fill="none" stroke="var(--${k})" stroke-width="2.6" stroke-linejoin="round" ${dash?`stroke-dasharray="${dash}"`:""} marker-end="url(#m-${k})"/>`;
+const arrow=(x,y,k,dir=0)=>`<path d="M-7 -6 L5 0 L-7 6z" transform="translate(${x} ${y}) rotate(${dir})" fill="var(--${k})"/>`;
+const tag=(x,y,t,a="middle")=>`<g><rect x="${a==="middle"?x-27:x}" y="${y-12}" width="54" height="17" rx="3" fill="#fff" stroke="var(--ink)" stroke-width=".9"/><text x="${a==="middle"?x:x+27}" y="${y+1}" class="t-tag" text-anchor="middle">${t}</text></g>`;
+const inst=(x,y,l1,l2,len=48)=>`<g><line x1="${x}" y1="${y+15}" x2="${x}" y2="${y+len}" stroke="var(--ink2)" stroke-dasharray="2 2"/><circle cx="${x}" cy="${y}" r="15" fill="#fff" stroke="var(--ink)" stroke-width="1.2"/><line x1="${x-15}" y1="${y}" x2="${x+15}" y2="${y}" stroke="var(--ink)" stroke-width=".8"/><text x="${x}" y="${y-3}" class="t-tag" text-anchor="middle" style="font-size:9px">${l1}</text><text x="${x}" y="${y+11}" class="t-tag" text-anchor="middle" style="font-size:9px">${l2}</text></g>`;
+const pump=(x,y,k,dashed)=>`<g ${dashed?'opacity=".55"':""}><rect x="${x-20}" y="${y+12}" width="44" height="6" fill="var(--steel)"/><rect x="${x+6}" y="${y-7}" width="22" height="16" rx="2" fill="#dfe6ea" stroke="var(--steel)"/><circle cx="${x-4}" cy="${y}" r="12" fill="#fff" stroke="var(--${k})" stroke-width="2.2"/><path d="M${x-4} ${y-12} h-12" stroke="var(--${k})" stroke-width="2.2"/><circle cx="${x-4}" cy="${y}" r="3.5" fill="var(--${k})"/></g>`;
+const valve=(x,y,open=true)=>`<path d="M${x-8} ${y-6} L${x+8} ${y+6} L${x+8} ${y-6} L${x-8} ${y+6}Z" fill="${open?"#fff":"var(--ink)"}" stroke="var(--ink)" stroke-width="1.2"/>`;
+/* вертикальная ёмкость с уровнем жидкости */
+const tank=(x,y,w,h,fill,lvl,dashed)=>{const r=8, ly=y+h*(1-lvl);return `<g ${dashed?'stroke-dasharray="5 4"':""}><path d="M${x} ${y+r} Q${x} ${y} ${x+r} ${y} H${x+w-r} Q${x+w} ${y} ${x+w} ${y+r} V${y+h} H${x}Z" fill="url(#tankg)" stroke="var(--steel)" stroke-width="1.4"/><path d="M${x+2} ${ly} q${w/8} -4 ${w/4} 0 t${w/4} 0 t${w/4} 0 t${w/4-4} 0 V${y+h-1} H${x+2}Z" fill="${fill}" opacity="${dashed?.5:.9}"/><rect x="${x-4}" y="${y+h}" width="${w+8}" height="5" fill="var(--steel)"/></g>`;};
+
+const PY=470;
+/* ===== ПОДАЧА ===== */
+add(T(52,PY-44,"t-lbl","Исходная вода")+T(52,PY-28,"t-val",`${D.Q.min}–${D.Q.max} м³/ч`));
+add(pipe(`M48 ${PY} H690`,"raw"));
+add(arrow(70,PY,"raw"));
+add(`<g><line x1="60" y1="${PY+5}" x2="60" y2="${PY+20}" stroke="var(--ink2)"/><path d="M54 ${PY+20} h12 l-6 9z" fill="var(--ink2)"/></g>`+T(60,PY+44,"t-sm","SP-1","middle"));
+add(`<g><rect x="84" y="${PY-24}" width="40" height="48" rx="6" fill="url(#cyl)" stroke="var(--steel)" stroke-width="1.4"/><path d="M90 ${PY-14} h28 M90 ${PY-5} h28 M90 ${PY+4} h28 M90 ${PY+13} h28" stroke="var(--steel)" stroke-width=".8" stroke-dasharray="2 2"/></g>`+tag(104,PY+46,"F-100")+T(104,PY+62,"t-sm","предфильтр","middle"));
+add(`<g><rect x="172" y="${PY+6}" width="34" height="18" rx="2" fill="#dfe6ea" stroke="var(--steel)"/><rect x="158" y="${PY+24}" width="54" height="6" fill="var(--steel)"/><circle cx="174" cy="${PY}" r="15" fill="#fff" stroke="var(--raw)" stroke-width="2.4"/><path d="M168 ${PY-8} L182 ${PY} L168 ${PY+8}z" fill="var(--raw)"/></g>`+tag(185,PY+46,"P-100")+T(185,PY+62,"t-sm","насос подачи","middle"));
+/* ===== УЗЕЛ КОАГУЛЯЦИИ ===== */
+add(inst(282,PY-62,"FT","101",57));
+add(`<rect x="306" y="380" width="312" height="8" fill="var(--steel)"/>`);
+add(tank(318,250,58,128,"#bfe0c8",.55,true)+tag(347,236,"T-102")+T(347,322,"t-sm","NaOH","middle"));
+add(pump(404,355,"ph",true)+tag(404,404,"P-102A/B"));
+add(`<path d="M376 362 H388" stroke="var(--ph)" stroke-width="2.6" stroke-dasharray="5 4"/><path d="M432 355 H446 V${PY-14}" fill="none" stroke="var(--ph)" stroke-width="2.6" stroke-dasharray="5 4" marker-end="url(#m-ph)"/>`);
+add(tank(470,236,62,142,"#f1c99a",.65,false)+tag(501,222,"T-101")+T(501,306,"t-sm","ПОХА","middle"));
+add(pump(562,355,"reag",false)+tag(562,404,"P-101A/B"));
+add(`<path d="M532 362 H546" stroke="var(--reag)" stroke-width="2.6"/><path d="M590 355 H602 V${PY-14}" fill="none" stroke="var(--reag)" stroke-width="2.6" marker-end="url(#m-reag)"/>`);
+add(`<circle cx="446" cy="${PY}" r="5" fill="#fff" stroke="var(--ph)" stroke-width="2"/><circle cx="602" cy="${PY}" r="5" fill="#fff" stroke="var(--reag)" stroke-width="2"/>`);
+add(`<g><rect x="622" y="${PY-13}" width="56" height="26" rx="4" fill="#fff" stroke="var(--coag)" stroke-width="1.8"/><path d="M626 ${PY} c6 -10 8 10 14 0 s8 10 14 0 s8 10 14 0 s6 10 8 0" fill="none" stroke="var(--coag)" stroke-width="1.6"/></g>`+tag(650,PY+34,"MX-101"));
+add(pipe(`M678 ${PY} H700 V272 H830`,"coag"));
+add(inst(716,226,"AT","101",46));
+const ct=(x,w,duty)=>{let s=`<g ${duty?"":'opacity=".6"'}><rect x="${x}" y="300" width="${w}" height="160" rx="3" fill="url(#tankg)" stroke="var(--steel)" stroke-width="1.5" ${duty?"":'stroke-dasharray="6 4"'}/>`;
+ if(duty){s+=`<rect x="${x+2}" y="318" width="${w-4}" height="140" fill="url(#coagg)" opacity=".75"/><path d="M${x+2} 318 q7 -4 14 0 t14 0 t14 0 t${w-46} 0" fill="none" stroke="#a07a3c" stroke-width="1"/>`;
+  for(let i=0;i<30;i++){const px=x+7+((i*37)%(w-14)), py=328+((i*53)%120), r=0.9+((py-328)/120)*2.1; s+=`<circle cx="${px}" cy="${py}" r="${r.toFixed(1)}" fill="#7d5a24" opacity=".55"/>`;}
+  s+=`<line x1="${x+w/2}" y1="318" x2="${x+w/2}" y2="420" stroke="var(--steel)" stroke-width="1.5"/>`;}
+ s+=`<rect x="${x-4}" y="460" width="${w+8}" height="5" fill="var(--steel)"/></g>`;return s;};
+add(ct(722,58,true)+ct(792,58,false));
+add(`<path d="M751 272 V300 M821 272 V300" stroke="var(--coag)" stroke-width="6"/>`+valve(751,286)+valve(821,286,false));
+add(tag(751,494,"CT-101")+tag(821,494,"CT-102"));
+add(T(751,513,"t-sm","рабочая","middle")+T(821,513,"t-sm","резервная","middle"));
+add(T(786,530,"t-sm",`${D.coag.ct} м³ · ${D.coag.t} с при Qном`,"middle"));
+add(pipe(`M747 452 V474 H912 V452 H1128`,"coag")+`<path d="M817 452 V474" stroke="var(--coag)" stroke-width="6" opacity=".55"/>`);
+/* ===== УЗЕЛ УФ ===== */
+const RX=934, N=9, step=21;
+add(`<rect x="${RX-12}" y="214" width="${N*step+22}" height="250" rx="2" fill="#fff" stroke="var(--steel)" stroke-width="2"/><rect x="${RX-18}" y="462" width="${N*step+34}" height="6" fill="var(--steel)"/>`);
+for(let i=0;i<N;i++){const x=RX+i*step;
+ add(`<rect x="${x}" y="244" width="15" height="196" rx="7" fill="url(#cyl)" stroke="var(--steel)" stroke-width="1"/><rect x="${x-1}" y="240" width="17" height="10" rx="3" fill="#9fb0ba"/><rect x="${x-1}" y="434" width="17" height="10" rx="3" fill="#9fb0ba"/><path d="M${x+7.5} 244 V230 M${x+7.5} 444 V452" stroke="var(--steel)" stroke-width="2"/>`);}
+add(pipe(`M${RX-8} 230 H${RX+N*step+4}`,"filt",8));
+add(tag(RX+N*step/2-2,224,"UF-201…"));
+add(T(950,492,"t-sm","n рабочих + резерв — по расчёту УФ","start"));
+add(`<g><line x1="905" y1="330" x2="922" y2="330" stroke="var(--ink2)" stroke-dasharray="2 2"/><circle cx="890" cy="330" r="15" fill="#fff" stroke="var(--ink)" stroke-width="1.2"/><line x1="875" y1="330" x2="905" y2="330" stroke="var(--ink)" stroke-width=".8"/><text x="890" y="327" class="t-tag" text-anchor="middle" style="font-size:9px">PDT</text><text x="890" y="341" class="t-tag" text-anchor="middle" style="font-size:9px">201</text></g>`);
+add(pipe(`M${RX+N*step+4} 230 H1190 V262`,"filt",8)+arrow(1170,230,"filt"));
+add(tank(1180,262,80,198,"url(#filtg)",.72,false)+tag(1220,250,"T-301"));
+add(T(1220,350,"t-sm","фильтрат","middle"));
+add(pipe(`M1260 300 H1352`,"filt",8)+arrow(1338,300,"filt"));
+add(T(1352,284,"t-lbl","Фильтрат","end")+T(1352,326,"t-val","потребителю","end"));
+add(pump(1230,506,"bw",false)+tag(1290,520,"P-202"));
+add(thin(`M1200 460 V494 H1214`,"bw")+`<path d="M1206 506 H1160 V244 H${RX+N*step+10}" fill="none" stroke="var(--bw)" stroke-width="2.6" stroke-dasharray="7 4" marker-end="url(#m-bw)"/>`);
+add(T(1166,420,"t-sm","BW","start"));
+const ceb=[["NaOCl",1288],["NaOH",1314],["кислота",1340]];
+ceb.forEach(([l,x])=>add(`<rect x="${x-10}" y="364" width="20" height="54" rx="3" fill="#fbe4ee" stroke="var(--chem)" stroke-width="1.2"/><text transform="translate(${x+3.5} 414) rotate(-90)" class="t-sm" style="font-size:9.5px;fill:var(--chem)">${l}</text>`));
+add(`<path d="M1288 418 V428 M1314 418 V428 M1340 418 V428 M1288 428 H1340 M1314 428 V470 H1174" fill="none" stroke="var(--chem)" stroke-width="2" stroke-dasharray="3 3"/><circle cx="1174" cy="470" r="3.5" fill="var(--chem)"/>`);
+add(T(1314,354,"t-tag","CEB","middle"));
+add(`<path d="M1128 452 H1140 V528" fill="none" stroke="var(--waste)" stroke-width="2.6" marker-end="url(#m-waste)"/>`+T(1112,530,"t-sm","сброс промывных вод","end"));
+add(`<g><line x1="928" y1="468" x2="928" y2="478" stroke="var(--ink2)"/><path d="M922 478 h12 l-6 9z" fill="var(--ink2)"/></g>`+T(928,502,"t-sm","SP-2","middle"));
+
+/* ===== нижняя часть: данные ===== */
+add(`<line x1="28" y1="600" x2="1372" y2="600" stroke="var(--ink)" stroke-width="1.2"/>`);
+const col=(x,w,cap)=>add(T(x,628,"t-cap",cap)+`<line x1="${x}" y1="636" x2="${x+w}" y2="636" stroke="var(--rule)"/>`);
+// Исходная вода
+col(40,300,"ИСХОДНАЯ ВОДА · АНАЛИЗ ДЕМО-А-0915");
+D.water.forEach(([l,v,u],i)=>{const y=660+i*22; add(T(40,y,"t-lbl",l)+T(260,y,"t-val",v,"end")+T(268,y,"t-unit",u));});
+add(T(40,830,"t-cap","ТРЕБОВАНИЯ К ФИЛЬТРАТУ"));
+D.req.forEach(([l,v],i)=>{const y=852+i*20; add(T(40,y,"t-lbl",l)+T(260,y,"t-val",v,"end"));});
+add(T(40,922,"t-sm","Заданы как требования; достижение")+T(40,936,"t-sm","не подтверждено — нужны испытания."));
+
+// Узел коагуляции — ключевые цифры
+const cx=370; col(cx,330,"УЗЕЛ КОАГУЛЯЦИИ · ПРЕДВАРИТЕЛЬНЫЙ РАСЧЁТ");
+const big=(x,y,v,u,l)=>add(T(x,y,"t-big",v)+T(x,y+16,"t-unit",u)+T(x,y+32,"t-sm",l));
+big(cx,676,D.coag.dose,"мг/л Al","расчётная доза (задана)");
+big(cx+170,676,D.coag.prodKg,"кг/ч","товарный ПОХА при Qnom");
+const rows=[["Коагулянт",`${D.coag.reag}, ${D.coag.prod}`],["Диапазон доз",`${D.coag.doseR} мг/л Al`],["Рабочий раствор, Qном",`${D.coag.work} л/ч`],["Насосы P-101A/B",`${D.coag.pump} л/ч, ≥ ${D.coag.p} бар`],["Регулирование подачи",`${D.coag.turn} (1 уст. → ${D.trains} уст.)`],["Камеры CT-101/102",`${D.coag.ct} м³ · ${D.coag.t}–${D.coag.tMin} с`],["L-101: dвн расч. / v при 1 уст.",`${D.coag.pipe} мм / ${D.coag.vMin} м/с`],["Коррекция pH","не требуется (демо)"]];
+rows.forEach(([l,v],i)=>{const y=738+i*21; add(T(cx,y,"t-lbl",l)+T(cx+330,y,"t-val",v,"end"));});
+
+add(T(cx,922,"t-sm",`Насос должен обеспечивать равномерный впрыск при работе одной установки`)+T(cx,936,"t-sm",`(qmin ≈ 11 л/ч); проверить при выборе модели насоса.`));
+// Узел УФ — ожидание расчёта
+const ux=740; col(ux,320,"УЗЕЛ УЛЬТРАФИЛЬТРАЦИИ");
+add(`<rect x="${ux}" y="648" width="320" height="34" rx="4" fill="#fbf4e4" stroke="#d9bf86"/>`+T(ux+12,670,"t-pend","Параметры появятся после расчёта узла УФ"));
+D.uf.forEach(([l,u,v],i)=>{const y=708+i*24; add(T(ux,y,"t-lbl",l)+(v?T(ux+320,y,"t-val",v,"end"):`<line x1="${ux+190}" y1="${y+3}" x2="${ux+270}" y2="${y+3}" stroke="var(--rule)" stroke-dasharray="3 3"/>`+T(ux+320,y,"t-unit",u||"","end")));});
+
+// Легенда потоков
+const lx=1100; add(T(lx,628,"t-cap","ПОТОКИ")+`<line x1="${lx}" y1="636" x2="1360" y2="636" stroke="var(--rule)"/>`);
+[["raw","Исходная вода",0],["coag","Коагулированная вода",0],["filt","Фильтрат",0],["reag","Коагулянт",1],["ph","pH-реагент",1],["bw","Обратная промывка",1],["chem","Реагенты CEB",1],["waste","Сброс",1]].forEach(([k,l,th],i)=>{const y=658+i*20; add(th?`<line x1="${lx}" y1="${y-4}" x2="${lx+34}" y2="${y-4}" stroke="var(--${k})" stroke-width="2.6" ${k==="bw"?'stroke-dasharray="7 4"':k==="chem"?'stroke-dasharray="3 3"':""}/>`:`<line x1="${lx}" y1="${y-4}" x2="${lx+34}" y2="${y-4}" stroke="var(--${k})" stroke-width="8"/><line x1="${lx}" y1="${y-4}" x2="${lx+34}" y2="${y-4}" stroke="#fff" stroke-opacity=".55" stroke-width="3"/>`); add(T(lx+44,y,"t-lbl",l));});
+add(`<line x1="${lx}" y1="822" x2="${lx+34}" y2="822" stroke="var(--steel)" stroke-width="1.4" stroke-dasharray="5 4"/>`+T(lx+44,826,"t-lbl","Резерв / при необходимости"));
+
+// штамп
+const sx=1100, sy=836;
+add(`<rect x="${sx}" y="${sy}" width="260" height="124" fill="#fff" stroke="var(--ink)" stroke-width="1.2"/><line x1="${sx}" y1="${sy+26}" x2="${sx+260}" y2="${sy+26}" stroke="var(--ink)"/><line x1="${sx}" y1="${sy+66}" x2="${sx+260}" y2="${sy+66}" stroke="var(--rule)"/><line x1="${sx}" y1="${sy+90}" x2="${sx+260}" y2="${sy+90}" stroke="var(--rule)"/><line x1="${sx+130}" y1="${sy+26}" x2="${sx+130}" y2="${sy+66}" stroke="var(--rule)"/>`);
+add(T(sx+10,sy+18,"t-h","Технологическая схема · лист 1"));
+add(T(sx+10,sy+42,"t-cap","РАСЧЁТ")+T(sx+10,sy+58,"t-val",D.calc));
+add(T(sx+140,sy+42,"t-cap","ДАТА")+T(sx+140,sy+58,"t-val",D.date));
+add(T(sx+10,sy+82,"t-cap","СТАТУС")+T(sx+140,sy+82,"t-val","Предварительный"));
+add(T(sx+10,sy+106,"t-sm","Не является P&ID и рабочей документацией.")+T(sx+10,sy+119,"t-sm","Числа — из сохранённой версии расчёта."));
+
+S.innerHTML=o;
+</script>
