@@ -1,5 +1,6 @@
 import { ATOMIC, isNum } from "../units/chem";
 import { PROFILES, metalFraction, basisLabel, type Basis, type CoagulantType } from "./profiles";
+import { evaluateMethod, assessPhCorrection, type DoseMethod, type WaterQuality, type MethodResult } from "./doseMethod";
 
 export const COAG_ENGINE_VERSION = "coag-core 0.1.0";
 
@@ -33,8 +34,8 @@ export interface CoagInput {
   coagulant: CoagulantType;
   passport: Passport;
   flow: FlowInput;
-  dose: { min: number | null; nom: number | null; max: number | null; basis: Basis; hydrateN?: number | null };
-  water: { pH?: number | null; alkalinity?: number | null; temperature?: number | null; o2?: number | null; oxidant?: string | null };
+  dose: { mode?: "manual" | "method"; method?: DoseMethod | null; accepted?: number | null; min: number | null; nom: number | null; max: number | null; basis: Basis; hydrateN?: number | null };
+  water: WaterQuality & { oxidant?: string | null };
   ph: {
     mode: "none" | "acid" | "base" | "unknown";
     reagent?: "HCl" | "H2SO4" | "NaOH";
@@ -74,7 +75,7 @@ export function effectiveFlows(fl: FlowInput) {
 }
 
 export function calculateCoagulation(inp: CoagInput) {
-  const W: [("warn" | "bad" | "info"), string][] = [];
+  const W: ["warn" | "bad" | "info", string][] = [];
   const A: string[] = [];
   const trace: TraceStage[] = [];
   const P = PROFILES[inp.coagulant];
@@ -99,22 +100,41 @@ export function calculateCoagulation(inp: CoagInput) {
   if (pp.form === "liquid" && !isNum(pp.density)) W.push(["warn", "Нет плотности товарного раствора — л/ч товарного продукта не рассчитываются."]);
   if (pp.form === "liquid" && isNum(pp.density) && (pp.density < 0.8 || pp.density > 2)) W.push(["warn", "Плотность вне 0,8–2,0 кг/л — проверьте паспорт."]);
 
-  // Этап 1 — доза (ручная)
-  const d = inp.dose;
+  // Этап 1 — выбор дозы: заданная пользователем или по методике
+  const dIn = inp.dose;
+  let method: MethodResult | null = null;
+  let d = { ...dIn };
+  const stage1: TraceRow[] = [];
+  if (dIn.mode === "method" && dIn.method && dIn.method.model !== "manual") {
+    method = evaluateMethod(dIn.method, inp.water, { w_me: wProd, basicity: pp.basicity ?? null, density: pp.density ?? null });
+    stage1.push(...method.rows.map((r) => ({ label: r.label, formula: r.formula, result: r.result, origin: "rule" as Origin })));
+    if (method.status === "ok") {
+      const acc = isNum(dIn.accepted) ? dIn.accepted : method.central;
+      d = { ...dIn, basis: method.basis, nom: isNum(acc) ? acc : null, min: isNum(acc) ? Math.min(method.low, acc) : method.low, max: isNum(acc) ? Math.max(method.high, acc) : method.high };
+      stage1.push({ label: "Доза, принятая пользователем", formula: isNum(dIn.accepted) ? "задана пользователем" : "= центральная оценка методики", result: isNum(acc) ? `${f(acc)} мг/л ${basisLabel(inp.coagulant, method.basis)}` : "не выбрана", origin: isNum(dIn.accepted) ? "user" : "rule" });
+      if (!isNum(acc)) W.push(["bad", "Методика не задаёт центральную оценку: примите расчётную дозу внутри диапазона."]);
+      else if (acc < method.low || acc > method.high) W.push(["warn", "Принятая доза вне диапазона методики."]);
+      W.push(["info", "Доза рассчитана по методике пользователя — предварительная оценка, не подтверждённый оптимум."]);
+    } else {
+      d = { ...dIn, min: null, nom: null, max: null };
+      if (method.status === "nodata") W.push(["bad", `Недостаточно данных для методики: ${method.missing.join(", ")}.`]);
+      if (method.status === "outside") W.push(["bad", `Вне области применимости методики: ${method.outside.join("; ")}. Доза по методике не выдаётся.`]);
+      if (method.status === "invalid") W.push(["bad", `Методика некорректна: ${method.errors.join(" ")}`]);
+    }
+  } else {
+    stage1.push({ label: "Методика", formula: "ручная доза (опубликована)", result: "", origin: "user" });
+  }
   const toMe = (x: number | null) => {
     if (!isNum(x)) return NaN;
     return d.basis === "product" ? x * wProd : x * metalFraction(inp.coagulant, d.basis, d.hydrateN);
   };
   const dMe = { min: toMe(d.min), nom: toMe(d.nom), max: toMe(d.max) };
   const doseOk = [dMe.min, dMe.nom, dMe.max].every(isNum);
-  if (!doseOk) W.push(["bad", "Нужны Dmin, Dном, Dmax с базой (и паспорт при базе «товарный продукт»)."]);
-  else if (!(dMe.min <= dMe.nom && dMe.nom <= dMe.max)) W.push(["bad", "Дозы: нужно Dmin ≤ Dном ≤ Dmax."]);
+  if (!doseOk && !method) W.push(["bad", "Нужны Dmin, Dном, Dmax с базой (и паспорт при базе «товарный продукт»)."]);
+  else if (doseOk && !(dMe.min <= dMe.nom && dMe.nom <= dMe.max)) W.push(["bad", "Дозы: нужно Dmin ≤ Dном ≤ Dmax."]);
   const bl = basisLabel(inp.coagulant, d.basis, d.hydrateN);
-  trace.push({ stage: "1", title: "Выбор дозы", rows: [
-    { label: "Методика", formula: "ручная доза (PUB-MANUAL, опубликована)", result: "", origin: "user" },
-    { label: "Диапазон и расчётная доза", formula: "Dmin / Dном / Dmax", result: `${f(d.min ?? NaN)} / ${f(d.nom ?? NaN)} / ${f(d.max ?? NaN)} мг/л ${bl}`, origin: "user" },
-    { label: "Предварительная оценка", formula: "согласованная методика не зарегистрирована", result: "недостаточно данных", origin: "nodata" },
-  ] });
+  stage1.push({ label: "Диапазон и расчётная доза", formula: "Dmin / Dном / Dmax", result: `${f(d.min ?? NaN)} / ${f(d.nom ?? NaN)} / ${f(d.max ?? NaN)} мг/л ${bl}`, origin: method ? "rule" : "user" });
+  trace.push({ stage: "1", title: "Выбор дозы", rows: stage1 });
 
   // Этап 2 — конверсия базы
   const conv: { basis: string; min: number; nom: number; max: number }[] = [];
@@ -161,6 +181,8 @@ export function calculateCoagulation(inp: CoagInput) {
     { label: "При Dном / Dmax", formula: "D × удельный расход", result: `${f(alk.atNom)} / ${f(alk.atMax)} мг-экв/л`, origin: "balance" },
     { label: "Ограничение", formula: "не прогноз pH и не расчёт дозы кислоты/щёлочи", result: "", origin: "note" },
   ] });
+
+  const phNeed = assessPhCorrection(inp.water, dIn.mode === "method" ? dIn.method?.phWindow ?? null : null, alk.atMax);
 
   // Этап 5 — коррекция pH
   const ph = inp.ph;
@@ -241,11 +263,11 @@ export function calculateCoagulation(inp: CoagInput) {
   ] });
 
   const hasBad = W.some((w) => w[0] === "bad");
-  const status: Status = !qOk || !passportOk || !doseOk ? "incomplete" : hasBad || W.length ? "clarify" : "user";
+  const status: Status = method && (method.status === "nodata" || method.status === "outside") ? "nodata" : !qOk || !passportOk || !doseOk ? "incomplete" : hasBad || W.some((w) => w[0] !== "info") ? "clarify" : method ? "prelim" : "user";
 
   return {
     engine: COAG_ENGINE_VERSION, status, flows: Q, flowOk: qOk, metal: P.metal, wProduct: wProd,
-    doseMetal: dMe, conversion: conv, product: flows, alkalinity: alk, ph: phRes, feso4: fe,
+    doseMetal: dMe, doseInput: d, method, phNeed, conversion: conv, product: flows, alkalinity: alk, ph: phRes, feso4: fe,
     chambers, pipe, pumps, warnings: W, assumptions: A, trace,
     qualityNote: "Требования к качеству заданы. Достижение расчётом не подтверждено; требуется проверка.",
   };

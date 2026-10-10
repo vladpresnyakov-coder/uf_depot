@@ -1,25 +1,29 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PROFILES, basisLabel, type Basis, type CoagulantType } from "@/core/coagulation/profiles";
+import { WATER_PARAMS, MANUAL_METHOD_ID, type DoseMethod, type WaterKey } from "@/core/coagulation/doseMethod";
 import type { CoagResult } from "@/core/coagulation/calculate";
 import { fmt, toNum, NumField, TextField, Select, Seg, StatusPill, Messages } from "@/components/ui";
+import { loadCatalog, saveCatalog, emptyProduct, emptyMethod, newId, TYPES, type Catalog, type Product } from "@/lib/catalog";
+import { ProductEditor, MethodEditor, productErrors, typeLabel } from "./CatalogEditors";
 import { t } from "@/i18n/ru";
 
 type S = Record<string, string>;
-const DEMO: Record<CoagulantType, S> = {
-  PACl: { name: "ДЕМО-ПОХА-17", form: "liquid", c: "17", cb: "Al2O3", rho: "1,37", basicity: "70", bdef: "[OH]/(3·[Al]), мольн. %", hn: "", wc: "10", wcb: "Al2O3", dmin: "1,5", dnom: "2,5", dmax: "4" },
-  FeCl3: { name: "ДЕМО-FeCl₃-40", form: "liquid", c: "40", cb: "salt", rho: "1,42", basicity: "", bdef: "", hn: "", wc: "20", wcb: "salt", dmin: "3", dnom: "5", dmax: "8" },
-  "Fe2(SO4)3": { name: "", form: "liquid", c: "", cb: "salt", rho: "", basicity: "", bdef: "", hn: "", wc: "", wcb: "salt", dmin: "", dnom: "", dmax: "" },
-  "Al2(SO4)3": { name: "", form: "solid", c: "", cb: "hydrate", rho: "", basicity: "", bdef: "", hn: "18", wc: "", wcb: "hydrate", dmin: "", dnom: "", dmax: "" },
-  FeSO4: { name: "ДЕМО-FeSO₄·7H₂O", form: "solid", c: "98", cb: "hydrate", rho: "", basicity: "", bdef: "", hn: "7", wc: "100", wcb: "hydrate", dmin: "3", dnom: "5", dmax: "8" },
-};
+const DEMO_WATER: Partial<Record<WaterKey, string>> = { pH: "7,4", alkalinity: "2,1", temperature: "8", turbidity: "6", color: "35", permanganate: "6,8", tss: "8", al: "0,05", fe: "0,3" };
+const STAR = "★";
 
 export default function CoagulationCalculator() {
+  const [cat, setCat] = useState<Catalog | null>(null);
   const [coag, setCoag] = useState<CoagulantType>("PACl");
-  const [pp, setPp] = useState<S>(DEMO.PACl);
-  const [doseBasis, setDoseBasis] = useState<Basis>("metal");
+  const [productId, setProductId] = useState<string>("");
+  const [methodId, setMethodId] = useState<string>("");
+  const [editProduct, setEditProduct] = useState<Product | null>(null);
+  const [editMethod, setEditMethod] = useState<DoseMethod | null>(null);
+  const [confirmDel, setConfirmDel] = useState<string | null>(null);
+  const [manualDose, setManualDose] = useState<S>({ basis: "metal", min: "1,5", nom: "2,5", max: "4" });
+  const [accepted, setAccepted] = useState("");
   const [flow, setFlow] = useState<S>({ mode: "uf", trains: "3", perTrain: "40", nom: "120", min: "", max: "", minO: "", maxO: "" });
-  const [water, setWater] = useState<S>({ pH: "7,4", alk: "2,1", T: "8", o2: "" });
+  const [water, setWater] = useState<Partial<Record<WaterKey, string>>>(DEMO_WATER);
   const [ph, setPh] = useState<S>({ mode: "none", reagent: "NaOH", method: "manual", d100: "", target: "", w: "0,46", rho: "1,49", wc: "50" });
   const [contact, setContact] = useState<S>({ calc: "timeToVolume", time: "60", timeBasis: "", volume: "", flowBasis: "max", k: "", kBasis: "" });
   const [pipe, setPipe] = useState<S>({ flowBasis: "max", v: "1,5", din: "" });
@@ -28,19 +32,49 @@ export default function CoagulationCalculator() {
   const [res, setRes] = useState<CoagResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(true);
+  const first = useRef(true);
+
+  // загрузка справочников из браузера
+  useEffect(() => {
+    const c = loadCatalog();
+    setCat(c);
+    selectType(c, c.defaultType);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function selectType(c: Catalog, tp: CoagulantType) {
+    setCoag(tp);
+    const prods = c.products.filter((p) => p.coagulantType === tp);
+    setProductId(c.defaultProduct[tp] && prods.some((p) => p.id === c.defaultProduct[tp]) ? (c.defaultProduct[tp] as string) : prods[0]?.id ?? "");
+    const meths = c.methods.filter((m) => m.coagulantType === tp);
+    setMethodId(c.defaultMethod[tp] && meths.some((m) => m.id === c.defaultMethod[tp]) ? (c.defaultMethod[tp] as string) : MANUAL_METHOD_ID(tp));
+    setEditProduct(null); setEditMethod(null); setRes(null); setAccepted("");
+  }
+  const commit = (c: Catalog) => { setCat(c); setSaved(saveCatalog(c)); };
 
   const P = PROFILES[coag];
-  const up = (set: (f: (s: S) => S) => void, k: string) => (v: string) => set((s) => ({ ...s, [k]: v }));
-  const basisOpts: [Basis, string][] = P.bases.map((b) => [b, basisLabel(coag, b, b === "hydrate" ? toNum(pp.hn) : null)]);
+  const products = cat?.products.filter((p) => p.coagulantType === coag) ?? [];
+  const methods = cat?.methods.filter((m) => m.coagulantType === coag) ?? [];
+  const product = products.find((p) => p.id === productId) ?? null;
+  const method = methods.find((m) => m.id === methodId) ?? null;
+  const isManual = !method || method.model === "manual";
+  const neededKeys = new Set<string>(method?.inputs.map((i) => i.key) ?? []);
+  const upS = (set: (f: (s: S) => S) => void, k: string) => (v: string) => set((s) => ({ ...s, [k]: v }));
 
   const run = useCallback(async () => {
+    if (!cat) return;
     setBusy(true); setErr(null);
+    const pr = product;
+    const w: Record<string, number | null> = {};
+    for (const k of Object.keys(WATER_PARAMS)) w[k] = toNum(water[k as WaterKey] ?? "");
     const body = {
       coagulant: coag,
-      passport: { name: pp.name, form: pp.form, hydrateN: toNum(pp.hn), concentration: toNum(pp.c), concentrationBasis: pp.cb || null, density: toNum(pp.rho), basicity: toNum(pp.basicity), basicityDefinition: pp.bdef, workingConcentration: toNum(pp.wc), workingBasis: pp.wcb || null },
+      passport: pr ? { name: pr.name, form: pr.form, hydrateN: pr.hydrateN, concentration: pr.concentration, concentrationBasis: pr.concentrationBasis, density: pr.density, basicity: pr.basicity, basicityDefinition: pr.basicityDefinition, freeAcidity: pr.freeAcidity, workingConcentration: pr.workingConcentration, workingBasis: pr.workingBasis } : { name: "", form: "liquid", concentration: null, concentrationBasis: null },
       flow: flow.mode === "uf" ? { mode: "uf", trains: toNum(flow.trains), perTrain: toNum(flow.perTrain), minOverride: toNum(flow.minO), maxOverride: toNum(flow.maxO) } : { mode: "coag", nom: toNum(flow.nom), min: toNum(flow.min), max: toNum(flow.max) },
-      dose: { min: toNum(pp.dmin), nom: toNum(pp.dnom), max: toNum(pp.dmax), basis: doseBasis, hydrateN: toNum(pp.hn) },
-      water: { pH: toNum(water.pH), alkalinity: toNum(water.alk), temperature: toNum(water.T), o2: toNum(water.o2) },
+      dose: isManual
+        ? { mode: "manual", min: toNum(manualDose.min), nom: toNum(manualDose.nom), max: toNum(manualDose.max), basis: manualDose.basis, hydrateN: pr?.hydrateN ?? null }
+        : { mode: "method", method, accepted: toNum(accepted), min: null, nom: null, max: null, basis: method!.outputBasis, hydrateN: pr?.hydrateN ?? null },
+      water: w,
       ph: { mode: ph.mode, reagent: ph.reagent, method: ph.method, dose100: toNum(ph.d100), target: toNum(ph.target), curve: [[0, 7.1], [5, 7.4], [10, 7.7], [15, 7.95]], massFraction: toNum(ph.w), density: toNum(ph.rho), working100: toNum(ph.wc) },
       contact: { calc: contact.calc, time: toNum(contact.time), timeBasis: contact.timeBasis, volume: toNum(contact.volume), flowBasis: contact.flowBasis, k: toNum(contact.k), kBasis: contact.kBasis },
       pipe: { flowBasis: pipe.flowBasis, velocity: toNum(pipe.v), actualInnerDiameterMm: toNum(pipe.din) },
@@ -53,168 +87,296 @@ export default function CoagulationCalculator() {
       if (!r.ok) { setErr(j.error ?? "Ошибка расчёта"); setRes(null); } else setRes(j.result);
     } catch { setErr("Сервер расчёта недоступен."); }
     setBusy(false);
-  }, [coag, pp, doseBasis, flow, water, ph, contact, pipe, pumps, ox]);
+  }, [cat, coag, product, method, isManual, manualDose, accepted, flow, water, ph, contact, pipe, pumps, ox]);
 
-  useEffect(() => { run(); }, []); // eslint-disable-line react-hooks/exhaustive-deps -- первый расчёт на демо-данных
+  useEffect(() => { if (cat && productId !== undefined && first.current) { first.current = false; run(); } }, [cat, productId, methodId, run]);
 
-  const pickCoag = (c: CoagulantType) => { setCoag(c); setPp(DEMO[c]); setDoseBasis("metal"); setRes(null); };
+  if (!cat) return <div className="page"><p className="muted">Загрузка справочников…</p></div>;
+
+  // --- действия справочников ---
+  const saveProduct = (p: Product) => {
+    const exists = cat.products.some((x) => x.id === p.id);
+    commit({ ...cat, products: exists ? cat.products.map((x) => (x.id === p.id ? p : x)) : [...cat.products, p] });
+    setProductId(p.id); setEditProduct(null);
+  };
+  const deleteProduct = (id: string) => {
+    const left = cat.products.filter((x) => x.id !== id);
+    const dp = { ...cat.defaultProduct };
+    if (dp[coag] === id) delete dp[coag];
+    commit({ ...cat, products: left, defaultProduct: dp });
+    setProductId(left.find((x) => x.coagulantType === coag)?.id ?? ""); setConfirmDel(null);
+  };
+  const saveMethod = (m: DoseMethod) => {
+    const exists = cat.methods.some((x) => x.id === m.id);
+    commit({ ...cat, methods: exists ? cat.methods.map((x) => (x.id === m.id ? m : x)) : [...cat.methods, m] });
+    setMethodId(m.id); setEditMethod(null);
+  };
+  const deleteMethod = (id: string) => {
+    const dm = { ...cat.defaultMethod };
+    if (dm[coag] === id) dm[coag] = MANUAL_METHOD_ID(coag);
+    commit({ ...cat, methods: cat.methods.filter((x) => x.id !== id), defaultMethod: dm });
+    setMethodId(MANUAL_METHOD_ID(coag)); setConfirmDel(null);
+  };
 
   return (
     <div className="page">
       <div className="eyebrow">Инструмент 1 · узел непосредственной коагуляции перед УФ</div>
       <h1>Коагуляция перед УФ</h1>
-      <p className="lead">Последовательность: исходная вода → предфильтр и насос подачи → коррекция pH → коагулянт → смешение и контакт → УФ. Предфильтр и насос стоят до ввода реагентов. Значения по умолчанию — <b>{t.demo}</b>.</p>
+      <p className="lead">Исходная вода → предфильтр и насос подачи → коррекция pH → коагулянт → смешение и контакт → УФ. Справочники продуктов и методик хранятся в этом браузере до появления входа в аккаунт. Начальные значения — <b>{t.demo}</b>.</p>
+      {!saved && <div className="msg warn small">Браузер не разрешает сохранять справочник: изменения действуют до закрытия страницы.</div>}
 
+      {/* ===== Коагулянт ===== */}
       <div className="panel" style={{ marginBottom: 20 }}>
-        <h2>Коагулянт</h2>
-        <Seg name="coag" value={coag} options={(Object.keys(PROFILES) as CoagulantType[]).map((k) => [k, `${PROFILES[k].label.split(" ").slice(-1)[0]} · ${PROFILES[k].oxidation}`])} onChange={pickCoag} />
-        <p className="footnote">Степень окисления железа указана всегда: Fe₂(SO₄)₃ — железо(III), FeSO₄ — железо(II). Для Fe₂(SO₄)₃ и Al₂(SO₄)₃ демо-паспорт не заполнен.</p>
+        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
+          <h2>Коагулянт</h2>
+          <button type="button" className="btn ghost" style={{ padding: "3px 10px" }} disabled={cat.defaultType === coag} onClick={() => commit({ ...cat, defaultType: coag })}>{cat.defaultType === coag ? `${STAR} тип по умолчанию` : "Сделать тип по умолчанию"}</button>
+        </div>
+        <Seg name="coag" value={coag} options={TYPES.map((k) => [k, `${cat.defaultType === k ? STAR + " " : ""}${typeLabel(k)}`])} onChange={(tp) => selectType(cat, tp)} />
+
+        <div className="grid2" style={{ marginTop: 16 }}>
+          <div>
+            <h3>Товарный продукт</h3>
+            {products.length ? (
+              <select aria-label="Товарный продукт" value={productId} onChange={(e) => { setProductId(e.target.value); setEditProduct(null); }} style={{ width: "100%" }}>
+                {products.map((p) => <option key={p.id} value={p.id}>{cat.defaultProduct[coag] === p.id ? STAR + " " : ""}{p.name}{p.manufacturer ? ` · ${p.manufacturer}` : ""}{p.demo ? " (ДЕМО)" : ""}</option>)}
+              </select>
+            ) : <div className="msg info small">Для {P.label} продуктов нет. Добавьте продукт с паспортными данными.</div>}
+            <div className="btns" style={{ marginTop: 8 }}>
+              <button type="button" className="btn ghost" onClick={() => setEditProduct(emptyProduct(coag))}>+ Новый</button>
+              {product && <button type="button" className="btn ghost" onClick={() => setEditProduct(product)}>Изменить</button>}
+              {product && <button type="button" className="btn ghost" onClick={() => setEditProduct({ ...product, id: newId("prod"), name: product.name + " (копия)", demo: false })}>Копия</button>}
+              {product && cat.defaultProduct[coag] !== product.id && <button type="button" className="btn ghost" onClick={() => commit({ ...cat, defaultProduct: { ...cat.defaultProduct, [coag]: product.id } })}>{STAR} По умолчанию</button>}
+              {product && (confirmDel === product.id
+                ? <><button type="button" className="btn" style={{ background: "var(--bad)", borderColor: "var(--bad)" }} onClick={() => deleteProduct(product.id)}>Удалить «{product.name}»</button><button type="button" className="btn ghost" onClick={() => setConfirmDel(null)}>Не удалять</button></>
+                : <button type="button" className="btn ghost" onClick={() => setConfirmDel(product.id)}>Удалить</button>)}
+            </div>
+            {product && !editProduct && <ProductSummary p={product} />}
+          </div>
+          <div>
+            <h3>Методика расчёта дозы</h3>
+            <select aria-label="Методика" value={methodId} onChange={(e) => { setMethodId(e.target.value); setEditMethod(null); setAccepted(""); }} style={{ width: "100%" }}>
+              {methods.map((m) => <option key={m.id} value={m.id}>{cat.defaultMethod[coag] === m.id ? STAR + " " : ""}{m.name}{m.model !== "manual" ? ` · v${m.version}` : ""}{m.status === "demo" ? " (ДЕМО)" : ""}</option>)}
+            </select>
+            <div className="btns" style={{ marginTop: 8 }}>
+              <button type="button" className="btn ghost" onClick={() => setEditMethod(emptyMethod(coag))}>+ Новая</button>
+              {method && !isManual && <button type="button" className="btn ghost" onClick={() => setEditMethod(method)}>Изменить</button>}
+              {method && !isManual && <button type="button" className="btn ghost" onClick={() => setEditMethod({ ...method, id: newId("meth"), name: method.name + " (копия)", version: 1, status: "user" })}>Копия</button>}
+              {method && cat.defaultMethod[coag] !== method.id && <button type="button" className="btn ghost" onClick={() => commit({ ...cat, defaultMethod: { ...cat.defaultMethod, [coag]: method.id } })}>{STAR} По умолчанию</button>}
+              {method && !isManual && (confirmDel === method.id
+                ? <><button type="button" className="btn" style={{ background: "var(--bad)", borderColor: "var(--bad)" }} onClick={() => deleteMethod(method.id)}>Удалить «{method.name}»</button><button type="button" className="btn ghost" onClick={() => setConfirmDel(null)}>Не удалять</button></>
+                : <button type="button" className="btn ghost" onClick={() => setConfirmDel(method.id)}>Удалить</button>)}
+            </div>
+            {method && !editMethod && <MethodSummary m={method} t={coag} />}
+          </div>
+        </div>
+        {editProduct && <ProductEditor key={editProduct.id} initial={editProduct} onSave={saveProduct} onCancel={() => setEditProduct(null)} />}
+        {editMethod && <MethodEditor key={editMethod.id} initial={editMethod} onSave={saveMethod} onCancel={() => setEditMethod(null)} />}
       </div>
 
       <div className="grid2">
         <div className="stack">
+          {/* ===== Качество исходной воды ===== */}
+          <div className="panel">
+            <h2>Качество исходной воды</h2>
+            <p className="small muted" style={{ marginTop: 0 }}>{isManual ? "Для ручной дозы показатели не обязательны, но нужны для баланса щёлочности и решения о коррекции pH." : `Методика «${method!.name}» требует: ${method!.inputs.filter((i) => i.key in WATER_PARAMS).map((i) => WATER_PARAMS[i.key as WaterKey].label).join(", ") || "—"}.`} Пустое поле — нет данных, не ноль.</p>
+            <div className="fields">
+              {(Object.keys(WATER_PARAMS) as WaterKey[]).filter((k) => (k !== "o2" && k !== "fe2") || coag === "FeSO4" || neededKeys.has(k)).map((k) => (
+                <NumField key={k} id={`w-${k}`} label={WATER_PARAMS[k].label} unit={WATER_PARAMS[k].unit} value={water[k] ?? ""} onChange={(v) => setWater((s) => ({ ...s, [k]: v }))} required={neededKeys.has(k)} />
+              ))}
+            </div>
+          </div>
+
+          {/* ===== Расход ===== */}
           <div className="panel">
             <h2>Расход исходной воды</h2>
-            <Seg name="flowmode" value={flow.mode} options={[["coag", "Только коагуляция"], ["uf", "С установками УФ"]]} onChange={up(setFlow, "mode")} />
+            <Seg name="flowmode" value={flow.mode} options={[["coag", "Только коагуляция"], ["uf", "С установками УФ"]]} onChange={upS(setFlow, "mode")} />
             {flow.mode === "coag" ? (
               <div className="fields" style={{ marginTop: 12 }}>
-                <NumField id="qn" label="Qном" unit="м³/ч" value={flow.nom} onChange={up(setFlow, "nom")} required hint="задаётся пользователем" />
-                <NumField id="qmin" label="Qmin" unit="м³/ч" value={flow.min} onChange={up(setFlow, "min")} placeholder="= Qном" hint="необязательно" />
-                <NumField id="qmax" label="Qmax" unit="м³/ч" value={flow.max} onChange={up(setFlow, "max")} placeholder="= Qном" hint="необязательно" />
+                <NumField id="qn" label="Qном" unit="м³/ч" value={flow.nom} onChange={upS(setFlow, "nom")} required hint="задаётся пользователем" />
+                <NumField id="qmin" label="Qmin" unit="м³/ч" value={flow.min} onChange={upS(setFlow, "min")} placeholder="= Qном" hint="необязательно" />
+                <NumField id="qmax" label="Qmax" unit="м³/ч" value={flow.max} onChange={upS(setFlow, "max")} placeholder="= Qном" hint="необязательно" />
               </div>
             ) : (
               <div className="fields" style={{ marginTop: 12 }}>
-                <NumField id="tr" label="Рабочих установок УФ" unit="шт." value={flow.trains} onChange={up(setFlow, "trains")} required />
-                <NumField id="pt" label="Подача исходной воды на одну установку" unit="м³/ч" value={flow.perTrain} onChange={up(setFlow, "perTrain")} required hint="из расчёта УФ (ДЕМО)" />
-                <NumField id="qmo" label="Qmin вручную" unit="м³/ч" value={flow.minO} onChange={up(setFlow, "minO")} placeholder="1 установка" />
-                <NumField id="qxo" label="Qmax вручную" unit="м³/ч" value={flow.maxO} onChange={up(setFlow, "maxO")} placeholder="= Qном" />
+                <NumField id="tr" label="Рабочих установок УФ" unit="шт." value={flow.trains} onChange={upS(setFlow, "trains")} required />
+                <NumField id="pt" label="Подача исходной воды на одну установку" unit="м³/ч" value={flow.perTrain} onChange={upS(setFlow, "perTrain")} required hint="из расчёта УФ (ДЕМО)" />
+                <NumField id="qmo" label="Qmin вручную" unit="м³/ч" value={flow.minO} onChange={upS(setFlow, "minO")} placeholder="1 установка" />
+                <NumField id="qxo" label="Qmax вручную" unit="м³/ч" value={flow.maxO} onChange={upS(setFlow, "maxO")} placeholder="= Qном" />
               </div>
             )}
           </div>
 
+          {/* ===== Доза ===== */}
           <div className="panel">
-            <h2>Паспорт продукта</h2>
-            <div className="fields">
-              <TextField id="pn" label="Название" value={pp.name} onChange={up(setPp, "name")} />
-              <Select id="pf" label="Форма" value={pp.form as "liquid" | "solid"} options={[["liquid", "жидкий"], ["solid", "твёрдый"]]} onChange={up(setPp, "form")} />
-              <NumField id="pc" label="Концентрация" unit="% масс." value={pp.c} onChange={up(setPp, "c")} required />
-              <Select id="pcb" label="База концентрации" value={pp.cb as Basis} options={basisOpts.filter(([b]) => b !== "product")} onChange={up(setPp, "cb")} />
-              {P.salt && <NumField id="phn" label="n в кристаллогидрате ·nH₂O" value={pp.hn} onChange={up(setPp, "hn")} />}
-              {pp.form === "liquid" && <NumField id="prho" label="Плотность товарного раствора" unit="кг/л" value={pp.rho} onChange={up(setPp, "rho")} required />}
-              {P.usesBasicity && <NumField id="pbas" label="Основность" unit="%" value={pp.basicity} onChange={up(setPp, "basicity")} />}
-              {P.usesBasicity && <TextField id="pbdef" label="Определение основности" value={pp.bdef} onChange={up(setPp, "bdef")} />}
-              <NumField id="pwc" label="Рабочий раствор" unit="г/л" value={pp.wc} onChange={up(setPp, "wc")} />
-              <Select id="pwcb" label="База рабочего раствора" value={pp.wcb as Basis} options={basisOpts} onChange={up(setPp, "wcb")} />
-            </div>
+            <h2>Доза коагулянта</h2>
+            {isManual ? (
+              <div className="fields">
+                <Select id="db" label="База дозы" value={manualDose.basis as Basis} options={P.bases.map((b) => [b, basisLabel(coag, b, product?.hydrateN)])} onChange={upS(setManualDose, "basis")} />
+                <NumField id="dmin" label="Dmin" unit="мг/л" value={manualDose.min} onChange={upS(setManualDose, "min")} required />
+                <NumField id="dnom" label="Dном (расчётная)" unit="мг/л" value={manualDose.nom} onChange={upS(setManualDose, "nom")} required />
+                <NumField id="dmax" label="Dmax" unit="мг/л" value={manualDose.max} onChange={upS(setManualDose, "max")} required />
+              </div>
+            ) : (
+              <>
+                <p className="small" style={{ marginTop: 0 }}>Доза рассчитывается по методике «{method!.name}» из качества воды{method!.inputs.some((i) => !(i.key in WATER_PARAMS)) ? " и данных продукта" : ""}. Результат — предварительная оценка, не подтверждённый оптимум.</p>
+                <div className="fields">
+                  <NumField id="acc" label={`Принятая доза, мг/л ${basisLabel(coag, method!.outputBasis)}`} value={accepted} onChange={setAccepted} placeholder="= центральная оценка" hint="необязательно: своя доза вместо центральной оценки" />
+                </div>
+              </>
+            )}
           </div>
 
+          {/* ===== Коррекция pH ===== */}
           <div className="panel">
-            <h2>Доза — заданная пользователем</h2>
-            <div className="fields">
-              <Select id="db" label="База дозы" value={doseBasis} options={basisOpts} onChange={setDoseBasis} />
-              <NumField id="dmin" label="Dmin" unit="мг/л" value={pp.dmin} onChange={up(setPp, "dmin")} required />
-              <NumField id="dnom" label="Dном (расчётная)" unit="мг/л" value={pp.dnom} onChange={up(setPp, "dnom")} required />
-              <NumField id="dmax" label="Dmax" unit="мг/л" value={pp.dmax} onChange={up(setPp, "dmax")} required />
-            </div>
-            <div className="msg info small">Предварительная оценка дозы: <b>недостаточно данных</b> — согласованная методика для {P.label} не зарегистрирована. Работает заданная доза.</div>
-          </div>
-
-          <div className="panel">
-            <h2>Вода и коррекция pH</h2>
-            <div className="fields">
-              <NumField id="wph" label="pH" value={water.pH} onChange={up(setWater, "pH")} />
-              <NumField id="walk" label="Общая щёлочность" unit="мг-экв/л" value={water.alk} onChange={up(setWater, "alk")} />
-              <NumField id="wt" label="Температура" unit="°C" value={water.T} onChange={up(setWater, "T")} />
-              {coag === "FeSO4" && <NumField id="wo2" label="Растворённый O₂" unit="мг/л" value={water.o2} onChange={up(setWater, "o2")} />}
-            </div>
-            <div style={{ marginTop: 14 }}><Seg name="phm" value={ph.mode as "none"} options={[["none", "Без коррекции"], ["acid", "Кислота"], ["base", "Щёлочь"], ["unknown", "Недостаточно данных"]]} onChange={up(setPh, "mode")} /></div>
+            <h2>Коррекция pH</h2>
+            <Seg name="phm" value={ph.mode as "none"} options={[["none", "Без коррекции"], ["acid", "Кислота"], ["base", "Щёлочь"], ["unknown", "Недостаточно данных"]]} onChange={upS(setPh, "mode")} />
+            <p className="footnote">Решение о необходимости коррекции показывается в результатах по рабочему диапазону pH методики и балансу щёлочности. Доза реагента — ручная или по титрационной кривой.</p>
             {(ph.mode === "acid" || ph.mode === "base") && (
               <div className="fields" style={{ marginTop: 12 }}>
-                <Select id="phr" label="Реагент" value={ph.reagent as "NaOH"} options={ph.mode === "acid" ? [["HCl", "HCl"], ["H2SO4", "H₂SO₄"]] : [["NaOH", "NaOH"]]} onChange={up(setPh, "reagent")} />
-                <Select id="phmeth" label="Способ дозы" value={ph.method as "manual"} options={[["manual", "заданная доза 100 %"], ["curve", "титрационная кривая (ДЕМО)"]]} onChange={up(setPh, "method")} />
-                {ph.method === "manual" ? <NumField id="phd" label="Доза 100 % вещества" unit="мг/л" value={ph.d100} onChange={up(setPh, "d100")} required /> : <NumField id="pht" label="Целевой pH" value={ph.target} onChange={up(setPh, "target")} hint="кривая ДЕМО: pH 7,1–7,95" />}
-                <NumField id="phw" label="Массовая доля в товарном" unit="доля" value={ph.w} onChange={up(setPh, "w")} />
-                <NumField id="phrho" label="Плотность товарного" unit="кг/л" value={ph.rho} onChange={up(setPh, "rho")} />
-                <NumField id="phwc" label="Рабочий раствор по 100 %" unit="г/л" value={ph.wc} onChange={up(setPh, "wc")} />
+                <Select id="phr" label="Реагент" value={ph.reagent as "NaOH"} options={ph.mode === "acid" ? [["HCl", "HCl"], ["H2SO4", "H₂SO₄"]] : [["NaOH", "NaOH"]]} onChange={upS(setPh, "reagent")} />
+                <Select id="phmeth" label="Способ дозы" value={ph.method as "manual"} options={[["manual", "заданная доза 100 %"], ["curve", "титрационная кривая (ДЕМО)"]]} onChange={upS(setPh, "method")} />
+                {ph.method === "manual" ? <NumField id="phd" label="Доза 100 % вещества" unit="мг/л" value={ph.d100} onChange={upS(setPh, "d100")} required /> : <NumField id="pht" label="Целевой pH" value={ph.target} onChange={upS(setPh, "target")} hint="кривая ДЕМО: pH 7,1–7,95" />}
+                <NumField id="phw" label="Массовая доля в товарном" unit="доля" value={ph.w} onChange={upS(setPh, "w")} />
+                <NumField id="phrho" label="Плотность товарного" unit="кг/л" value={ph.rho} onChange={upS(setPh, "rho")} />
+                <NumField id="phwc" label="Рабочий раствор по 100 %" unit="г/л" value={ph.wc} onChange={upS(setPh, "wc")} />
               </div>
             )}
             {coag === "FeSO4" && (
               <div className="fields" style={{ marginTop: 12 }}>
-                <Select id="ox" label="Статус проверки окисления Fe²⁺" value={ox} options={[["auto", "по наличию данных"], ["required", "требуется проверка"], ["test", "подтверждено испытанием"]]} onChange={setOx} hint="«подтверждено методикой» недоступно: методика не зарегистрирована" />
+                <Select id="ox" label="Статус проверки окисления Fe²⁺" value={ox} options={[["auto", "по наличию данных"], ["required", "требуется проверка"], ["test", "подтверждено испытанием"]]} onChange={setOx} />
               </div>
             )}
           </div>
 
+          {/* ===== Оборудование ===== */}
           <div className="panel">
             <h2>Камеры, труба, насосы</h2>
-            <Seg name="cc" value={contact.calc as "timeToVolume"} options={[["timeToVolume", "время → объём"], ["volumeToTime", "объём → время"]]} onChange={up(setContact, "calc")} />
+            <Seg name="cc" value={contact.calc as "timeToVolume"} options={[["timeToVolume", "время → объём"], ["volumeToTime", "объём → время"]]} onChange={upS(setContact, "calc")} />
             <div className="fields" style={{ marginTop: 12 }}>
-              <Select id="cfb" label="Расход подбора камер" value={contact.flowBasis as "max"} options={[["max", "Qmax"], ["nom", "Qном"], ["min", "Qmin"]]} onChange={up(setContact, "flowBasis")} />
-              {contact.calc === "timeToVolume" ? <NumField id="ct" label="Контактное время" unit="с" value={contact.time} onChange={up(setContact, "time")} required hint="ДЕМО; без значения по умолчанию" /> : <NumField id="cv" label="Эффективный объём камеры" unit="м³" value={contact.volume} onChange={up(setContact, "volume")} required />}
-              <TextField id="ctb" label="Основание контактного времени" value={contact.timeBasis} onChange={up(setContact, "timeBasis")} />
-              <NumField id="ck" label="k использования объёма" value={contact.k} onChange={up(setContact, "k")} placeholder="не применяется" />
-              <Select id="pfb" label="Расход для трубы" value={pipe.flowBasis as "max"} options={[["max", "Qmax"], ["nom", "Qном"], ["min", "Qmin"]]} onChange={up(setPipe, "flowBasis")} />
-              <NumField id="pv" label="Расчётная скорость" unit="м/с" value={pipe.v} onChange={up(setPipe, "v")} required hint="ДЕМО" />
-              <NumField id="pdin" label="Факт. dвн выбранного типоразмера" unit="мм" value={pipe.din} onChange={up(setPipe, "din")} />
-              <NumField id="pup" label="Давление в точке ввода" unit="бар изб." value={pumps.p} onChange={up(setPumps, "p")} />
-              <NumField id="pudp" label="Доп. потери" unit="бар" value={pumps.dp} onChange={up(setPumps, "dp")} />
-              <NumField id="pum" label="Проектный запас подачи" unit="%" value={pumps.margin} onChange={up(setPumps, "margin")} placeholder="не задан" />
+              <Select id="cfb" label="Расход подбора камер" value={contact.flowBasis as "max"} options={[["max", "Qmax"], ["nom", "Qном"], ["min", "Qmin"]]} onChange={upS(setContact, "flowBasis")} />
+              {contact.calc === "timeToVolume" ? <NumField id="ct" label="Контактное время" unit="с" value={contact.time} onChange={upS(setContact, "time")} required hint="ДЕМО; без значения по умолчанию" /> : <NumField id="cv" label="Эффективный объём камеры" unit="м³" value={contact.volume} onChange={upS(setContact, "volume")} required />}
+              <TextField id="ctb" label="Основание контактного времени" value={contact.timeBasis} onChange={upS(setContact, "timeBasis")} />
+              <NumField id="ck" label="k использования объёма" value={contact.k} onChange={upS(setContact, "k")} placeholder="не применяется" />
+              <Select id="pfb" label="Расход для трубы" value={pipe.flowBasis as "max"} options={[["max", "Qmax"], ["nom", "Qном"], ["min", "Qmin"]]} onChange={upS(setPipe, "flowBasis")} />
+              <NumField id="pv" label="Расчётная скорость" unit="м/с" value={pipe.v} onChange={upS(setPipe, "v")} required hint="ДЕМО" />
+              <NumField id="pdin" label="Факт. dвн выбранного типоразмера" unit="мм" value={pipe.din} onChange={upS(setPipe, "din")} />
+              <NumField id="pup" label="Давление в точке ввода" unit="бар изб." value={pumps.p} onChange={upS(setPumps, "p")} />
+              <NumField id="pudp" label="Доп. потери" unit="бар" value={pumps.dp} onChange={upS(setPumps, "dp")} />
+              <NumField id="pum" label="Проектный запас подачи" unit="%" value={pumps.margin} onChange={upS(setPumps, "margin")} placeholder="не задан" />
             </div>
           </div>
-          <div className="btns"><button className="btn" type="button" onClick={run} disabled={busy}>{busy ? "Расчёт…" : "Рассчитать"}</button></div>
+          <div className="btns"><button className="btn" type="button" onClick={run} disabled={busy || !product}>{busy ? "Расчёт…" : "Рассчитать"}</button>{!product && <span className="small muted">Выберите или добавьте товарный продукт.</span>}</div>
         </div>
 
-        <div className="stack">{err ? <div className="msg bad">{err}</div> : res ? <Results r={res} coag={coag} /> : <div className="panel muted">Расчёт…</div>}</div>
+        <div className="stack">{err ? <div className="msg bad">{err}</div> : res ? <Results r={res} coag={coag} /> : <div className="panel muted">Нажмите «Рассчитать».</div>}</div>
       </div>
     </div>
   );
 }
 
+function ProductSummary({ p }: { p: Product }) {
+  const e = productErrors(p);
+  return (
+    <dl className="kv small" style={{ marginTop: 10 }}>
+      <dt>Производитель / марка</dt><dd>{p.manufacturer || "—"} / {p.grade || "—"}</dd>
+      <dt>Концентрация</dt><dd>{p.concentration != null && p.concentrationBasis ? `${fmt(p.concentration)} % по ${basisLabel(p.coagulantType, p.concentrationBasis, p.hydrateN)}` : "не задана"}</dd>
+      <dt>Плотность</dt><dd>{p.form === "solid" ? "твёрдый" : p.density != null ? `${fmt(p.density)} кг/л` : "не задана"}</dd>
+      {PROFILES[p.coagulantType].usesBasicity && <><dt>Основность</dt><dd>{p.basicity != null ? `${fmt(p.basicity)} %` : "—"}</dd></>}
+      <dt>Рабочий раствор</dt><dd>{p.workingConcentration != null && p.workingBasis ? `${fmt(p.workingConcentration)} г/л по ${basisLabel(p.coagulantType, p.workingBasis, p.hydrateN)}` : "не задан"}</dd>
+      {e.length > 0 && <><dt>Проверка</dt><dd style={{ color: "var(--warn)" }}>{e.length} замеч.</dd></>}
+    </dl>
+  );
+}
+
+function MethodSummary({ m, t: tp }: { m: DoseMethod; t: CoagulantType }) {
+  if (m.model === "manual") return <p className="small muted" style={{ marginTop: 10 }}>Доза задаётся пользователем: Dmin, Dном, Dmax с базой. Всегда доступна.</p>;
+  return (
+    <dl className="kv small" style={{ marginTop: 10 }}>
+      <dt>Модель</dt><dd>{m.model === "expression" ? `D = ${m.expression}` : `таблица по «${m.lookup?.key}», ${m.lookup?.rows.length ?? 0} строк`}</dd>
+      <dt>Результат</dt><dd>мг/л {basisLabel(tp, m.outputBasis)}</dd>
+      <dt>Входы</dt><dd>{m.inputs.map((i) => i.key).join(", ")}</dd>
+      <dt>Рабочий pH</dt><dd>{m.phWindow?.min != null && m.phWindow?.max != null ? `${fmt(m.phWindow.min, 2)}–${fmt(m.phWindow.max, 2)}` : "не задан"}</dd>
+      <dt>Основание</dt><dd style={{ textAlign: "right", fontFamily: "var(--f-body)" }}>{m.source}</dd>
+    </dl>
+  );
+}
+
+const NEED: Record<string, [string, string]> = {
+  none: ["s-balance", "Коррекция pH не требуется по критерию методики"],
+  acid: ["s-clarify", "Требуется подкисление"],
+  base: ["s-clarify", "Требуется подщелачивание"],
+  unknown: ["s-nodata", "Необходимость коррекции не определена"],
+};
+
 function Results({ r, coag }: { r: CoagResult; coag: CoagulantType }) {
   const P = PROFILES[coag];
   const QL: Record<string, string> = { min: "Qmin", nom: "Qном", max: "Qmax" };
+  const m = r.method;
   return (
     <>
       <div className="panel">
         <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <h2 style={{ margin: 0 }}>Результаты</h2><StatusPill status={r.status} />
         </div>
-        <p className="footnote">Ядро {r.engine}. Доза — {t.status.user.toLowerCase()}; пересчёты — материальный баланс.</p>
-        <div className="tw"><table><thead><tr><th></th>{r.product.map((f) => <th key={f.k} className="n">{QL[f.k]}</th>)}</tr></thead><tbody>
-          <tr><td>Q, м³/ч</td>{r.product.map((f) => <td key={f.k} className="n">{fmt(f.q, 1)}</td>)}</tr>
-          <tr><td>Доза Dном <span className="basis">мг/л {P.metal}</span></td>{r.product.map((f) => <td key={f.k} className="n">{fmt(r.doseMetal.nom)}</td>)}</tr>
-          <tr><td>Доза товарного продукта, мг/л</td>{r.product.map((f) => <td key={f.k} className="n">{fmt(f.Dp)}</td>)}</tr>
-          <tr><td>{P.metal} (100 %), кг/ч</td>{r.product.map((f) => <td key={f.k} className="n">{fmt(f.Mme)}</td>)}</tr>
-          <tr><td>Товарный продукт, кг/ч</td>{r.product.map((f) => <td key={f.k} className="n">{fmt(f.Mp)}</td>)}</tr>
-          <tr><td>Товарный продукт, л/ч</td>{r.product.map((f) => <td key={f.k} className="n">{fmt(f.Lp)}</td>)}</tr>
-          <tr><td>Рабочий раствор, л/ч</td>{r.product.map((f) => <td key={f.k} className="n">{fmt(f.Lw)}</td>)}</tr>
-        </tbody></table></div>
+        {m && m.status === "ok" && (
+          <div className="cards" style={{ marginTop: 12 }}>
+            <div className="kcard"><div className="k">ДИАПАЗОН МЕТОДИКИ</div><div className="v" style={{ fontSize: 20 }}>{fmt(m.low)}…{fmt(m.high)}</div><div className="u">мг/л {basisLabel(coag, m.basis)}</div></div>
+            <div className="kcard"><div className="k">ЦЕНТРАЛЬНАЯ ОЦЕНКА</div><div className="v" style={{ fontSize: 20 }}>{fmt(m.central)}</div><div className="u">{Number.isFinite(m.central) ? `мг/л ${basisLabel(coag, m.basis)}` : "методика не задаёт"}</div></div>
+            <div className="kcard" style={{ borderColor: "var(--accent)" }}><div className="k">ПРИНЯТАЯ ДОЗА</div><div className="v" style={{ fontSize: 20 }}>{fmt(r.doseInput.nom ?? NaN)}</div><div className="u">мг/л {basisLabel(coag, m.basis)}</div></div>
+            <div className="kcard"><div className="k">ДОЗА ДЛЯ МАКС. ПОДАЧИ НАСОСА</div><div className="v" style={{ fontSize: 20 }}>{fmt(r.doseInput.max ?? NaN)}</div><div className="u">мг/л · max(верх; принятая)</div></div>
+          </div>
+        )}
+        {m && m.status !== "ok" && (
+          <div className="msg bad" style={{ marginTop: 12 }}>
+            <b>{m.status === "nodata" ? "Недостаточно данных для методики." : m.status === "outside" ? "Вне области применимости методики." : "Методика некорректна."}</b>{" "}
+            {m.status === "nodata" ? `Заполните: ${m.missing.join(", ")}.` : m.status === "outside" ? m.outside.join("; ") + "." : m.errors.join(" ")} Доза по методике не выдаётся; можно выбрать «Доза задаётся пользователем».
+          </div>
+        )}
+        <p className="footnote">Ядро {r.engine}. Пересчёты — материальный баланс.</p>
+        {r.flowOk && Number.isFinite(r.doseMetal.nom) && (
+          <div className="tw"><table><thead><tr><th></th>{r.product.map((f) => <th key={f.k} className="n">{QL[f.k]}</th>)}</tr></thead><tbody>
+            <tr><td>Q, м³/ч</td>{r.product.map((f) => <td key={f.k} className="n">{fmt(f.q, 1)}</td>)}</tr>
+            <tr><td>Доза Dном <span className="basis">мг/л {P.metal}</span></td>{r.product.map((f) => <td key={f.k} className="n">{fmt(r.doseMetal.nom)}</td>)}</tr>
+            <tr><td>Доза товарного продукта, мг/л</td>{r.product.map((f) => <td key={f.k} className="n">{fmt(f.Dp)}</td>)}</tr>
+            <tr><td>{P.metal} (100 %), кг/ч</td>{r.product.map((f) => <td key={f.k} className="n">{fmt(f.Mme)}</td>)}</tr>
+            <tr><td>Товарный продукт, кг/ч</td>{r.product.map((f) => <td key={f.k} className="n">{fmt(f.Mp)}</td>)}</tr>
+            <tr><td>Товарный продукт, л/ч</td>{r.product.map((f) => <td key={f.k} className="n">{fmt(f.Lp)}</td>)}</tr>
+            <tr><td>Рабочий раствор, л/ч</td>{r.product.map((f) => <td key={f.k} className="n">{fmt(f.Lw)}</td>)}</tr>
+          </tbody></table></div>
+        )}
       </div>
 
       <div className="panel">
-        <h3>Пересчёт дозы по базам</h3>
-        <div className="tw"><table><thead><tr><th>База</th><th className="n">Dmin</th><th className="n">Dном</th><th className="n">Dmax</th></tr></thead><tbody>
-          {r.conversion.map((c) => <tr key={c.basis}><td><span className="basis">мг/л {c.basis}</span></td><td className="n">{fmt(c.min)}</td><td className="n">{fmt(c.nom)}</td><td className="n">{fmt(c.max)}</td></tr>)}
-        </tbody></table></div>
-        <h3 style={{ marginTop: 14 }}>Теоретический расход щёлочности</h3>
-        <dl className="kv"><dt>При Dном / Dmax</dt><dd>{fmt(r.alkalinity.atNom)} / {fmt(r.alkalinity.atMax)} мг-экв/л</dd><dt>Щёлочность воды</dt><dd>{fmt(r.alkalinity.water)} мг-экв/л</dd></dl>
-        <p className="footnote">Стехиометрический баланс, не прогноз pH и не расчёт дозы кислоты/щёлочи.</p>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}><h3 style={{ margin: 0 }}>Коррекция pH</h3><span className={`pill ${NEED[r.phNeed.need][0]}`}>{NEED[r.phNeed.need][1]}</span></div>
+        <ul className="small" style={{ margin: "10px 0 0", paddingLeft: 18, display: "grid", gap: 4 }}>{r.phNeed.reasons.map((x, i) => <li key={i}>{x}</li>)}</ul>
+        <dl className="kv" style={{ marginTop: 10 }}><dt>Теоретический расход щёлочности при Dном / Dmax</dt><dd>{fmt(r.alkalinity.atNom)} / {fmt(r.alkalinity.atMax)} мг-экв/л</dd><dt>Щёлочность воды</dt><dd>{fmt(r.alkalinity.water)} мг-экв/л</dd></dl>
       </div>
 
-      <div className="panel">
-        <h3>Оборудование</h3>
-        <dl className="kv">
-          <dt>CT-101/102: Vэфф одной камеры ({QL[r.chambers.flowBasis]})</dt><dd>{fmt(r.chambers.Veff)} м³</dd>
-          <dt>Vгеом одной / двух камер</dt><dd>{fmt(r.chambers.Vgeom)} / {fmt(2 * r.chambers.Vgeom)} м³</dd>
-          <dt>Время при Qmin / Qном / Qmax</dt><dd>{r.chambers.times.map((x) => fmt(x.t, 0)).join(" / ")} с</dd>
-          <dt>L-101: dвн расчётный ({QL[r.pipe.flowBasis]})</dt><dd>{fmt(r.pipe.dCalcMm, 1)} мм</dd>
-          <dt>Скорость при Qmin / Qном / Qmax</dt><dd>{r.pipe.actualMm ? r.pipe.velocities.map((x) => fmt(x.v, 2)).join(" / ") + " м/с" : "нужен факт. dвн"}</dd>
-        </dl>
-        <div className="tw" style={{ marginTop: 10 }}><table><thead><tr><th>Позиция</th><th className="n">qmin, л/ч</th><th className="n">qном</th><th className="n">qmax</th><th className="n">Кратн.</th><th className="n">P, бар</th></tr></thead><tbody>
-          {r.pumps.map((p) => <tr key={p.tag}><td><span className="tag">{p.tag}</span><div className="small muted">{p.name}</div></td><td className="n">{fmt(p.qmin)}</td><td className="n">{fmt(p.qnom)}</td><td className="n">{fmt(p.qmax)}</td><td className="n">{Number.isFinite(p.turndown) ? `1:${fmt(p.turndown, 1)}` : "—"}</td><td className="n">≥ {fmt(p.pressureBar, 1)}</td></tr>)}
-        </tbody></table></div>
-        <p className="footnote">Требуемые характеристики, а не выбор насоса. qmin = q(Dmin, Qmin), qmax = q(Dmax, Qmax).</p>
-      </div>
+      {Number.isFinite(r.doseMetal.nom) && (
+        <div className="panel">
+          <h3>Пересчёт дозы по базам</h3>
+          <div className="tw"><table><thead><tr><th>База</th><th className="n">Dmin</th><th className="n">Dном</th><th className="n">Dmax</th></tr></thead><tbody>
+            {r.conversion.map((c) => <tr key={c.basis}><td><span className="basis">мг/л {c.basis}</span></td><td className="n">{fmt(c.min)}</td><td className="n">{fmt(c.nom)}</td><td className="n">{fmt(c.max)}</td></tr>)}
+          </tbody></table></div>
+        </div>
+      )}
+
+      {Number.isFinite(r.doseMetal.nom) && (
+        <div className="panel">
+          <h3>Оборудование</h3>
+          <dl className="kv">
+            <dt>CT-101/102: Vэфф одной камеры ({QL[r.chambers.flowBasis]})</dt><dd>{fmt(r.chambers.Veff)} м³</dd>
+            <dt>Vгеом одной / двух камер</dt><dd>{fmt(r.chambers.Vgeom)} / {fmt(2 * r.chambers.Vgeom)} м³</dd>
+            <dt>Время при Qmin / Qном / Qmax</dt><dd>{r.chambers.times.map((x) => fmt(x.t, 0)).join(" / ")} с</dd>
+            <dt>L-101: dвн расчётный ({QL[r.pipe.flowBasis]})</dt><dd>{fmt(r.pipe.dCalcMm, 1)} мм</dd>
+            <dt>Скорость при Qmin / Qном / Qmax</dt><dd>{r.pipe.actualMm ? r.pipe.velocities.map((x) => fmt(x.v, 2)).join(" / ") + " м/с" : "нужен факт. dвн"}</dd>
+          </dl>
+          <div className="tw" style={{ marginTop: 10 }}><table><thead><tr><th>Позиция</th><th className="n">qmin, л/ч</th><th className="n">qном</th><th className="n">qmax</th><th className="n">Кратн.</th><th className="n">P, бар</th></tr></thead><tbody>
+            {r.pumps.map((p) => <tr key={p.tag}><td><span className="tag">{p.tag}</span><div className="small muted">{p.name}</div></td><td className="n">{fmt(p.qmin)}</td><td className="n">{fmt(p.qnom)}</td><td className="n">{fmt(p.qmax)}</td><td className="n">{Number.isFinite(p.turndown) ? `1:${fmt(p.turndown, 1)}` : "—"}</td><td className="n">≥ {fmt(p.pressureBar, 1)}</td></tr>)}
+          </tbody></table></div>
+          <p className="footnote">Требуемые характеристики, а не выбор насоса. qmin = q(Dmin, Qmin), qmax = q(Dmax, Qmax).</p>
+        </div>
+      )}
 
       {r.feso4 && <div className="panel"><h3>FeSO₄: окисление Fe²⁺</h3><dl className="kv"><dt>Стехиометрическая потребность O₂ при Dmax</dt><dd>{fmt(r.feso4.o2Need)} мг/л</dd><dt>Растворённый O₂</dt><dd>{fmt(r.feso4.o2)} мг/л</dd><dt>Статус проверки</dt><dd>{{ unchecked: "не проверено", required: "требуется проверка", method: "подтверждено методикой", test: "подтверждено испытанием" }[r.feso4.status]}</dd></dl>{r.feso4.missing.length > 0 && <div className="msg warn small">Не хватает: {r.feso4.missing.join(", ")}.</div>}</div>}
 
