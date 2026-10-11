@@ -7,6 +7,14 @@ import { fmt, toNum, NumField, TextField, Select, Seg, StatusPill, Messages } fr
 import { loadCatalog, saveCatalog, seedCatalog, normalizeCatalog, emptyProduct, emptyMethod, newId, TYPES, type Catalog, type Product } from "@/lib/catalog";
 import { useMe } from "@/lib/account";
 import { SaveCalc } from "@/components/SaveCalc";
+import { BuiltinCard } from "@/components/BuiltinCard";
+import { builtinAsMethod, builtinById, builtinsFor, defaultOptions, recommendedBuiltin, OBJECT_TYPES, STATUS_LABEL, type ObjectType, type Opts } from "@/core/coagulation/normative";
+
+/** Методики типа: ручная доза, встроенные (нормативные и справочные), методики пользователя. */
+function methodsOf(c: Catalog, tp: CoagulantType): DoseMethod[] {
+  const own = c.methods.filter((m) => m.coagulantType === tp);
+  return [...own.filter((m) => m.model === "manual"), ...builtinsFor(tp).map((d) => builtinAsMethod(d, tp)), ...own.filter((m) => m.model !== "manual")];
+}
 import { ProductEditor, MethodEditor, productErrors, typeLabel } from "./CatalogEditors";
 import { t } from "@/i18n/ru";
 
@@ -24,6 +32,8 @@ export default function CoagulationCalculator() {
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
   const [manualDose, setManualDose] = useState<S>({ basis: "metal", min: "1,5", nom: "2,5", max: "4" });
   const [accepted, setAccepted] = useState("");
+  const [bOpts, setBOpts] = useState<Record<string, Opts>>({});
+  const [objType, setObjType] = useState<ObjectType>("other");
   const [flow, setFlow] = useState<S>({ mode: "uf", trains: "3", perTrain: "40", nom: "120", min: "", max: "", minO: "", maxO: "" });
   const [water, setWater] = useState<Partial<Record<WaterKey, string>>>(DEMO_WATER);
   const [ph, setPh] = useState<S>({ mode: "none", reagent: "NaOH", method: "manual", d100: "", target: "", w: "0,46", rho: "1,49", wc: "50" });
@@ -71,7 +81,7 @@ export default function CoagulationCalculator() {
     setCoag(tp);
     const prods = c.products.filter((p) => p.coagulantType === tp);
     setProductId(c.defaultProduct[tp] && prods.some((p) => p.id === c.defaultProduct[tp]) ? (c.defaultProduct[tp] as string) : prods[0]?.id ?? "");
-    const meths = c.methods.filter((m) => m.coagulantType === tp);
+    const meths = methodsOf(c, tp);
     setMethodId(c.defaultMethod[tp] && meths.some((m) => m.id === c.defaultMethod[tp]) ? (c.defaultMethod[tp] as string) : MANUAL_METHOD_ID(tp));
     setEditProduct(null); setEditMethod(null); setRes(null); setAccepted("");
   }
@@ -83,11 +93,15 @@ export default function CoagulationCalculator() {
 
   const P = PROFILES[coag];
   const products = cat?.products.filter((p) => p.coagulantType === coag) ?? [];
-  const methods = cat?.methods.filter((m) => m.coagulantType === coag) ?? [];
+  const methods = cat ? methodsOf(cat, coag) : [];
   const product = products.find((p) => p.id === productId) ?? null;
   const method = methods.find((m) => m.id === methodId) ?? null;
   const isManual = !method || method.model === "manual";
-  const neededKeys = new Set<string>(method?.inputs.map((i) => i.key) ?? []);
+  const builtin = method?.model === "builtin" ? builtinById(method.builtinId ?? "") : null;
+  const opts: Opts = builtin ? { ...defaultOptions(builtin), ...(bOpts[builtin.id] ?? {}) } : {};
+  const setOpt = (k: string) => (v: string) => builtin && setBOpts((s) => ({ ...s, [builtin.id]: { ...opts, [k]: v } }));
+  const neededKeys = new Set<string>(builtin ? builtin.required(opts) : method?.inputs.map((i) => i.key) ?? []);
+  const rec = recommendedBuiltin(objType, coag);
   const upS = (set: (f: (s: S) => S) => void, k: string) => (v: string) => set((s) => ({ ...s, [k]: v }));
 
   const run = useCallback(async () => {
@@ -102,7 +116,7 @@ export default function CoagulationCalculator() {
       flow: flow.mode === "uf" ? { mode: "uf", trains: toNum(flow.trains), perTrain: toNum(flow.perTrain), minOverride: toNum(flow.minO), maxOverride: toNum(flow.maxO) } : { mode: "coag", nom: toNum(flow.nom), min: toNum(flow.min), max: toNum(flow.max) },
       dose: isManual
         ? { mode: "manual", min: toNum(manualDose.min), nom: toNum(manualDose.nom), max: toNum(manualDose.max), basis: manualDose.basis, hydrateN: pr?.hydrateN ?? null }
-        : { mode: "method", method, accepted: toNum(accepted), min: null, nom: null, max: null, basis: method!.outputBasis, hydrateN: pr?.hydrateN ?? null },
+        : { mode: "method", method, options: opts, accepted: toNum(accepted), min: null, nom: null, max: null, basis: method!.outputBasis, hydrateN: pr?.hydrateN ?? null },
       water: w,
       ph: { mode: ph.mode, reagent: ph.reagent, method: ph.method, dose100: toNum(ph.d100), target: toNum(ph.target), curve: [[0, 7.1], [5, 7.4], [10, 7.7], [15, 7.95]], massFraction: toNum(ph.w), density: toNum(ph.rho), working100: toNum(ph.wc) },
       contact: { calc: contact.calc, time: toNum(contact.time), timeBasis: contact.timeBasis, volume: toNum(contact.volume), flowBasis: contact.flowBasis, k: toNum(contact.k), kBasis: contact.kBasis },
@@ -117,7 +131,7 @@ export default function CoagulationCalculator() {
       if (!r.ok) { setErr(j.error ?? "Ошибка расчёта"); setRes(null); } else setRes(j.result);
     } catch { setErr("Сервер расчёта недоступен."); }
     setBusy(false);
-  }, [cat, coag, product, method, isManual, manualDose, accepted, flow, water, ph, contact, pipe, pumps, ox]);
+  }, [cat, coag, product, method, isManual, manualDose, accepted, flow, water, ph, contact, pipe, pumps, ox, JSON.stringify(opts)]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { if (cat && productId !== undefined && first.current) { first.current = false; run(); } }, [cat, productId, methodId, run]);
 
@@ -195,18 +209,32 @@ export default function CoagulationCalculator() {
           <div>
             <h3>Методика расчёта дозы</h3>
             <select aria-label="Методика" value={methodId} onChange={(e) => { setMethodId(e.target.value); setEditMethod(null); setAccepted(""); }} style={{ width: "100%" }}>
-              {methods.map((m) => <option key={m.id} value={m.id}>{cat.defaultMethod[coag] === m.id ? STAR + " " : ""}{m.name}{m.model !== "manual" ? ` · v${m.version}` : ""}{m.status === "demo" ? " (ДЕМО)" : ""}</option>)}
+              {(() => {
+                const opt = (m: DoseMethod) => <option key={m.id} value={m.id}>{cat.defaultMethod[coag] === m.id ? STAR + " " : ""}{m.name}{m.model === "expression" || m.model === "lookup" ? ` · v${m.version}` : ""}{m.status === "demo" ? " (ДЕМО)" : ""}</option>;
+                const b = methods.filter((m) => m.model === "builtin"), u = methods.filter((m) => m.model === "expression" || m.model === "lookup");
+                return <>
+                  {methods.filter((m) => m.model === "manual").map(opt)}
+                  {b.length > 0 && <optgroup label="Нормативные и справочные">{b.map(opt)}</optgroup>}
+                  {u.length > 0 && <optgroup label="Мои методики">{u.map(opt)}</optgroup>}
+                </>;
+              })()}
             </select>
             <div className="btns" style={{ marginTop: 8 }}>
               <button type="button" className="btn ghost" onClick={() => setEditMethod(emptyMethod(coag))}>+ Новая</button>
-              {method && !isManual && <button type="button" className="btn ghost" onClick={() => setEditMethod(method)}>Изменить</button>}
-              {method && !isManual && <button type="button" className="btn ghost" onClick={() => setEditMethod({ ...method, id: newId("meth"), name: method.name + " (копия)", version: 1, status: "user" })}>Копия</button>}
+              {method && !isManual && !builtin && <button type="button" className="btn ghost" onClick={() => setEditMethod(method)}>Изменить</button>}
+              {method && !isManual && !builtin && <button type="button" className="btn ghost" onClick={() => setEditMethod({ ...method, id: newId("meth"), name: method.name + " (копия)", version: 1, status: "user" })}>Копия</button>}
               {method && cat.defaultMethod[coag] !== method.id && <button type="button" className="btn ghost" onClick={() => commit({ ...cat, defaultMethod: { ...cat.defaultMethod, [coag]: method.id } })}>{STAR} По умолчанию</button>}
-              {method && !isManual && (confirmDel === method.id
+              {method && !isManual && !builtin && (confirmDel === method.id
                 ? <><button type="button" className="btn" style={{ background: "var(--bad)", borderColor: "var(--bad)" }} onClick={() => deleteMethod(method.id)}>Удалить «{method.name}»</button><button type="button" className="btn ghost" onClick={() => setConfirmDel(null)}>Не удалять</button></>
                 : <button type="button" className="btn ghost" onClick={() => setConfirmDel(method.id)}>Удалить</button>)}
             </div>
-            {method && !editMethod && <MethodSummary m={method} t={coag} />}
+            <div className="fields" style={{ marginTop: 10 }}>
+              <Select id="obj" label="Тип объекта" value={objType} options={OBJECT_TYPES} onChange={(v) => setObjType(v as ObjectType)} />
+            </div>
+            {objType !== "other" && (rec
+              ? <p className="small" style={{ margin: "6px 0 0" }}>Рекомендуемая: {rec.title.split(" — ")[0]}{objType === "vos" ? " (действующий документ — СП 31.13330.2021: доза по пробной коагуляции)" : ""}. {method?.builtinId !== rec.id && <button type="button" className="linkbtn" onClick={() => { setMethodId(builtinAsMethod(rec, coag).id); setAccepted(""); }}>Выбрать</button>}</p>
+              : <p className="small muted" style={{ margin: "6px 0 0" }}>Для {P.label} рекомендуемой встроенной методики для этого типа объекта нет.</p>)}
+            {method && !editMethod && (builtin ? <BuiltinCard d={builtin} compact /> : <MethodSummary m={method} t={coag} />)}
           </div>
         </div>
         {editProduct && <ProductEditor key={editProduct.id} initial={editProduct} onSave={saveProduct} onCancel={() => setEditProduct(null)} />}
@@ -218,9 +246,9 @@ export default function CoagulationCalculator() {
           {/* ===== Качество исходной воды ===== */}
           <div className="panel">
             <h2>Качество исходной воды</h2>
-            <p className="small muted" style={{ marginTop: 0 }}>{isManual ? "Для ручной дозы показатели не обязательны, но нужны для баланса щёлочности и решения о коррекции pH." : `Методика «${method!.name}» требует: ${method!.inputs.filter((i) => i.key in WATER_PARAMS).map((i) => WATER_PARAMS[i.key as WaterKey].label).join(", ") || "—"}.`} Пустое поле — нет данных, не ноль.</p>
+            <p className="small muted" style={{ marginTop: 0 }}>{isManual ? "Для ручной дозы показатели не обязательны, но нужны для баланса щёлочности и решения о коррекции pH." : `Методика требует: ${[...neededKeys].filter((k) => k in WATER_PARAMS).map((k) => WATER_PARAMS[k as WaterKey].label).join(", ") || "—"}.`} Пустое поле — нет данных, не ноль.</p>
             <div className="fields">
-              {(Object.keys(WATER_PARAMS) as WaterKey[]).filter((k) => (k !== "o2" && k !== "fe2") || coag === "FeSO4" || neededKeys.has(k)).map((k) => (
+              {(Object.keys(WATER_PARAMS) as WaterKey[]).filter((k) => ((k !== "o2" && k !== "fe2") || coag === "FeSO4" || neededKeys.has(k)) && (k !== "turbidityMg" || neededKeys.has(k) || (water.turbidityMg ?? "") !== "")).map((k) => (
                 <NumField key={k} id={`w-${k}`} label={WATER_PARAMS[k].label} unit={WATER_PARAMS[k].unit} value={water[k] ?? ""} onChange={(v) => setWater((s) => ({ ...s, [k]: v }))} required={neededKeys.has(k)} />
               ))}
             </div>
@@ -258,8 +286,11 @@ export default function CoagulationCalculator() {
               </div>
             ) : (
               <>
-                <p className="small" style={{ marginTop: 0 }}>Доза рассчитывается по методике «{method!.name}» из качества воды{method!.inputs.some((i) => !(i.key in WATER_PARAMS)) ? " и данных продукта" : ""}. Результат — предварительная оценка, не подтверждённый оптимум.</p>
+                <p className="small" style={{ marginTop: 0 }}>{builtin ? <>Доза рассчитывается по методике «{builtin.title.split(" — ")[0]}» ({STATUS_LABEL[builtin.status].toLowerCase()}). Результат — расчётная доза, не окончательная проектная: уточняется пробной коагуляцией и при наладке.</> : <>Доза рассчитывается по методике «{method!.name}» из качества воды{method!.inputs.some((i) => !(i.key in WATER_PARAMS)) ? " и данных продукта" : ""}. Результат — предварительная оценка, не подтверждённый оптимум.</>}</p>
                 <div className="fields">
+                  {builtin && builtin.options.filter((o) => !o.types || o.types.includes(coag)).filter((o) => !(builtin.id.startsWith("snip") && o.key === "bound" && opts.mode === "color")).map((o) => o.kind === "select"
+                    ? <Select key={o.key} id={`bo-${o.key}`} label={o.label} value={opts[o.key]} options={o.choices!} onChange={setOpt(o.key)} />
+                    : <NumField key={o.key} id={`bo-${o.key}`} label={o.label} unit={o.unit} value={opts[o.key] ?? ""} onChange={setOpt(o.key)} hint={o.hint} />)}
                   <NumField id="acc" label={`Принятая доза, мг/л ${basisLabel(coag, method!.outputBasis)}`} value={accepted} onChange={setAccepted} placeholder="= центральная оценка" hint="необязательно: своя доза вместо центральной оценки" />
                 </div>
               </>

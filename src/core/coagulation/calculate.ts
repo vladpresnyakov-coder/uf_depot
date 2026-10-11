@@ -34,7 +34,7 @@ export interface CoagInput {
   coagulant: CoagulantType;
   passport: Passport;
   flow: FlowInput;
-  dose: { mode?: "manual" | "method"; method?: DoseMethod | null; accepted?: number | null; min: number | null; nom: number | null; max: number | null; basis: Basis; hydrateN?: number | null };
+  dose: { mode?: "manual" | "method"; method?: DoseMethod | null; options?: Record<string, string>; accepted?: number | null; min: number | null; nom: number | null; max: number | null; basis: Basis; hydrateN?: number | null };
   water: WaterQuality & { oxidant?: string | null };
   ph: {
     mode: "none" | "acid" | "base" | "unknown";
@@ -106,7 +106,9 @@ export function calculateCoagulation(inp: CoagInput) {
   let d = { ...dIn };
   const stage1: TraceRow[] = [];
   if (dIn.mode === "method" && dIn.method && dIn.method.model !== "manual") {
-    method = evaluateMethod(dIn.method, inp.water, { w_me: wProd, basicity: pp.basicity ?? null, density: pp.density ?? null });
+    method = evaluateMethod(dIn.method, inp.water, { w_me: wProd, basicity: pp.basicity ?? null, density: pp.density ?? null }, dIn.options ?? {});
+    for (const x of method.warnings ?? []) W.push(["warn", x]);
+    for (const x of method.info ?? []) W.push(["info", x]);
     stage1.push(...method.rows.map((r) => ({ label: r.label, formula: r.formula, result: r.result, origin: "rule" as Origin })));
     if (method.status === "ok") {
       const acc = isNum(dIn.accepted) ? dIn.accepted : method.central;
@@ -114,7 +116,7 @@ export function calculateCoagulation(inp: CoagInput) {
       stage1.push({ label: "Доза, принятая пользователем", formula: isNum(dIn.accepted) ? "задана пользователем" : "= центральная оценка методики", result: isNum(acc) ? `${f(acc)} мг/л ${basisLabel(inp.coagulant, method.basis)}` : "не выбрана", origin: isNum(dIn.accepted) ? "user" : "rule" });
       if (!isNum(acc)) W.push(["bad", "Методика не задаёт центральную оценку: примите расчётную дозу внутри диапазона."]);
       else if (acc < method.low || acc > method.high) W.push(["warn", "Принятая доза вне диапазона методики."]);
-      W.push(["info", "Доза рассчитана по методике пользователя — предварительная оценка, не подтверждённый оптимум."]);
+      W.push(["info", dIn.method.model === "builtin" ? "Доза рассчитана по встроенной методике — расчётная (ориентировочная) доза, не окончательная проектная." : "Доза рассчитана по методике пользователя — предварительная оценка, не подтверждённый оптимум."]);
     } else {
       d = { ...dIn, min: null, nom: null, max: null };
       if (method.status === "nodata") W.push(["bad", `Недостаточно данных для методики: ${method.missing.join(", ")}.`]);

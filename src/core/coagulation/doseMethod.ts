@@ -6,6 +6,7 @@
 import { isNum } from "../units/chem";
 import { evaluate, identifiers, parse } from "./expr";
 import type { Basis, CoagulantType } from "./profiles";
+import { builtinById, type Opts } from "./normative";
 
 /** Показатели исходной воды, доступные методикам. Единицы фиксированы. */
 export const WATER_PARAMS = {
@@ -13,6 +14,7 @@ export const WATER_PARAMS = {
   alkalinity: { label: "Общая щёлочность", unit: "мг-экв/л" },
   temperature: { label: "Температура", unit: "°C" },
   turbidity: { label: "Мутность", unit: "NTU" },
+  turbidityMg: { label: "Мутность (по каолину)", unit: "мг/л" },
   color: { label: "Цветность", unit: "град. Pt-Co" },
   permanganate: { label: "Перманганатная окисляемость", unit: "мг O₂/л" },
   toc: { label: "Общий органический углерод (TOC)", unit: "мг C/л" },
@@ -35,13 +37,15 @@ export const PRODUCT_PARAMS = {
 export type ProductKey = keyof typeof PRODUCT_PARAMS;
 export type ProductVars = Partial<Record<ProductKey, number | null>>;
 
-export type MethodModel = "manual" | "expression" | "lookup";
+export type MethodModel = "manual" | "expression" | "lookup" | "builtin";
 
 export interface DoseMethod {
   id: string;
   name: string;
   coagulantType: CoagulantType;
   model: MethodModel;
+  /** Встроенная методика (нормативная / справочная): расчёт задан в ядре, запись не редактируется. */
+  builtinId?: string;
   version: number;
   /** Входы методики с областью применимости. */
   inputs: { key: WaterKey | ProductKey; min?: number | null; max?: number | null }[];
@@ -73,6 +77,9 @@ export interface MethodResult {
   high: number;
   basis: Basis;
   rows: { label: string; formula: string; result: string }[];
+  /** Предупреждения и пояснения методики (встроенные методики). */
+  warnings?: string[];
+  info?: string[];
 }
 
 const f = (x: number, d = 3) => (isNum(x) ? Number(x.toFixed(d)).toLocaleString("ru-RU", { maximumFractionDigits: d }) : "—");
@@ -82,6 +89,7 @@ const labelOf = (k: string) => (k in WATER_PARAMS ? WATER_PARAMS[k as WaterKey] 
 export function validateMethod(m: DoseMethod): string[] {
   const e: string[] = [];
   if (m.model === "manual") return e;
+  if (m.model === "builtin") { if (!m.builtinId || !builtinById(m.builtinId)) e.push("Встроенная методика не найдена."); return e; }
   if (!m.name.trim()) e.push("Не задано название методики.");
   if (!m.source.trim()) e.push("Не указан источник / основание методики.");
   for (const i of m.inputs) {
@@ -119,9 +127,16 @@ export function validateMethod(m: DoseMethod): string[] {
   return e;
 }
 
-export function evaluateMethod(m: DoseMethod, water: WaterQuality, product: ProductVars): MethodResult {
+export function evaluateMethod(m: DoseMethod, water: WaterQuality, product: ProductVars, opts: Opts = {}): MethodResult {
   const out: MethodResult = { status: "ok", missing: [], outside: [], errors: [], central: NaN, low: NaN, high: NaN, basis: m.outputBasis, rows: [] };
   if (m.model === "manual") { out.status = "manual"; return out; }
+  if (m.model === "builtin") {
+    const def = m.builtinId ? builtinById(m.builtinId) : null;
+    if (!def) { out.status = "invalid"; out.errors.push("Встроенная методика не найдена."); return out; }
+    const r = def.evaluate(m.coagulantType, water, opts);
+    r.rows.unshift({ label: "Методика", formula: `${def.doc}, ${def.clause} · v${def.version}`, result: def.status === "normative" ? "нормативная" : def.status === "superseded" ? "отменённый документ, справочно" : "справочная" });
+    return r;
+  }
   out.errors = validateMethod(m);
   if (out.errors.length) { out.status = "invalid"; return out; }
   out.rows.push({ label: "Методика", formula: `${m.name} · v${m.version} · ${m.model === "expression" ? "выражение" : "таблица"}`, result: m.status === "demo" ? "ДЕМО-пример" : m.status === "verified" ? "проверена" : "задана пользователем" });

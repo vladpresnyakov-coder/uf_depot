@@ -1,6 +1,7 @@
 import { calculateCoagulation, type CoagInput } from "@/core/coagulation/calculate";
 import type { Basis, CoagulantType } from "@/core/coagulation/profiles";
 import { errorResponse, InputError, num, oneOf, readJson, str } from "@/lib/validate";
+import { builtinAsMethod, builtinById } from "@/core/coagulation/normative";
 import { WATER_PARAMS, PRODUCT_PARAMS, type DoseMethod, type WaterQuality, type WaterKey } from "@/core/coagulation/doseMethod";
 
 const COAG = ["PACl", "Al2(SO4)3", "FeCl3", "Fe2(SO4)3", "FeSO4"] as const;
@@ -13,6 +14,12 @@ const INPUT_KEYS = [...Object.keys(WATER_PARAMS), ...Object.keys(PRODUCT_PARAMS)
 function parseMethod(v: unknown, coagulant: CoagulantType): DoseMethod | null {
   if (!v || typeof v !== "object") return null;
   const m = v as R;
+  if (m.model === "builtin") {
+    // встроенная методика строится из кода по идентификатору; данные клиента не используются
+    const def = builtinById(str(m.builtinId, 80));
+    if (!def || !def.coagulants[coagulant]) throw new InputError("Встроенная методика не найдена или не применяется к выбранному коагулянту.");
+    return builtinAsMethod(def, coagulant);
+  }
   const opt = { optional: true } as const;
   const model = oneOf(m.model, "тип методики", ["manual", "expression", "lookup"] as const);
   const inputs = Array.isArray(m.inputs) ? (m.inputs as R[]).slice(0, 20).map((i, k) => ({ key: oneOf(i.key, `вход ${k + 1}`, INPUT_KEYS), min: num(i.min, `min входа ${k + 1}`, opt), max: num(i.max, `max входа ${k + 1}`, opt) })) : [];
@@ -29,6 +36,14 @@ function parseMethod(v: unknown, coagulant: CoagulantType): DoseMethod | null {
     phWindow: m.phWindow && typeof m.phWindow === "object" ? { min: num((m.phWindow as R).min, "pH min", { min: 0, max: 14, ...opt }), max: num((m.phWindow as R).max, "pH max", { min: 0, max: 14, ...opt }) } : null,
     source: str(m.source, 400), status: m.status === "demo" ? "demo" : m.status === "verified" ? "verified" : "user", createdAt: str(m.createdAt, 30),
   };
+}
+
+/** Опции встроенной методики: только строки, ограниченный набор ключей. */
+function parseOptions(v: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!v || typeof v !== "object") return out;
+  for (const [k, x] of Object.entries(v as R).slice(0, 20)) if (/^[A-Za-z]{1,20}$/.test(k) && (typeof x === "string" || typeof x === "number")) out[k] = String(x).slice(0, 40);
+  return out;
 }
 
 function parseWater(w: R): WaterQuality & { oxidant?: string | null } {
@@ -64,7 +79,7 @@ function parseInput(b: R): CoagInput {
       ? { mode: "uf", trains: num(fl.trains, "число установок", { min: 1, max: 100, int: true }), perTrain: num(fl.perTrain, "подача на установку", { min: 0 }), minOverride: num(fl.minOverride, "Qmin", { min: 0, ...opt }), maxOverride: num(fl.maxOverride, "Qmax", { min: 0, ...opt }) }
       : { mode: "coag", nom: num(fl.nom, "Qном", { min: 0 }), min: num(fl.min, "Qmin", { min: 0, ...opt }), max: num(fl.max, "Qmax", { min: 0, ...opt }) },
     dose: {
-      mode: d.mode === "method" ? "method" : "manual", method: d.mode === "method" ? parseMethod(d.method, b.coagulant as CoagulantType) : null, accepted: num(d.accepted, "принятая доза", { min: 0, ...opt }),
+      mode: d.mode === "method" ? "method" : "manual", method: d.mode === "method" ? parseMethod(d.method, b.coagulant as CoagulantType) : null, options: parseOptions(d.options), accepted: num(d.accepted, "принятая доза", { min: 0, ...opt }),
       min: num(d.min, "Dmin", { min: 0, ...opt }), nom: num(d.nom, "Dном", { min: 0, ...opt }), max: num(d.max, "Dmax", { min: 0, ...opt }), basis: oneOf(d.basis, "база дозы", BASES as readonly Basis[]), hydrateN: num(d.hydrateN, "n гидрата дозы", { min: 0, max: 30, ...opt }),
     },
     water: parseWater(w),

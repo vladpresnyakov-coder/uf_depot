@@ -72,6 +72,7 @@ export function seedCatalog(): Catalog {
   const demo = (t: CoagulantType, p: Partial<Product>): Product => ({ ...emptyProduct(t), id: `demo-${t}`, demo: true, source: "ДЕМО: значения для примера, не паспорт производителя", ...p });
   const products: Product[] = [
     demo("PACl", { name: "ДЕМО-ПОХА-17", manufacturer: "(демо)", grade: "жидкий", form: "liquid", concentration: 17, concentrationBasis: "Al2O3", density: 1.37, basicity: 70, basicityDefinition: "[OH]/(3·[Al]), мольн. %", workingPreparation: "разбавление водой", workingConcentration: 10, workingBasis: "Al2O3" }),
+    demo("Al2(SO4)3", { name: "ДЕМО-Al₂(SO₄)₃·18H₂O очищенный", manufacturer: "(демо)", grade: "кусковой", form: "solid", hydrateN: 18, concentration: 15, concentrationBasis: "Al2O3", workingPreparation: "растворение", workingConcentration: 10, workingBasis: "Al2O3" }),
     demo("FeCl3", { name: "ДЕМО-FeCl₃-40", manufacturer: "(демо)", grade: "раствор 40 %", form: "liquid", concentration: 40, concentrationBasis: "salt", density: 1.42, workingPreparation: "разбавление водой", workingConcentration: 20, workingBasis: "salt" }),
     demo("FeSO4", { name: "ДЕМО-FeSO₄·7H₂O", manufacturer: "(демо)", grade: "кристаллический", form: "solid", hydrateN: 7, concentration: 98, concentrationBasis: "hydrate", workingPreparation: "растворение", workingConcentration: 100, workingBasis: "hydrate" }),
   ];
@@ -92,7 +93,7 @@ export function seedCatalog(): Catalog {
   ];
   return {
     version: 1, defaultType: "PACl", products, methods,
-    defaultProduct: { PACl: "demo-PACl", FeCl3: "demo-FeCl3", FeSO4: "demo-FeSO4" },
+    defaultProduct: { PACl: "demo-PACl", "Al2(SO4)3": "demo-Al2(SO4)3", FeCl3: "demo-FeCl3", FeSO4: "demo-FeSO4" },
     defaultMethod: Object.fromEntries(TYPES.map((t) => [t, MANUAL_METHOD_ID(t)])),
   };
 }
