@@ -36,9 +36,9 @@ export default function Home() {
           <p className="small muted" style={{ margin: 0 }}>Q1, Q2, Qnet; поиск J по требуемой производительности; группы BW, продление, реагенты CEB, баланс ОО.</p>
         </Link>
         <div className="panel tool-card">
-          <span className="st muted">Следующий этап</span>
+          <span className="st muted">Аккаунт · следующий этап</span>
           <h3>Проекты, версии, документы</h3>
-          <p className="small muted" style={{ margin: 0 }}>Вход по e-mail и Telegram, сохранение версий, ТКП, схема, DOCX/PDF/Excel.</p>
+          <p className="small muted" style={{ margin: 0 }}>Уже работает: вход через Telegram, справочники в аккаунте, сохранённые расчёты. Далее: проекты и версии, ТКП, схема, DOCX/PDF/Excel.</p>
         </div>
       </div>
     </div>

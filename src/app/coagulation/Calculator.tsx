@@ -4,7 +4,9 @@ import { PROFILES, basisLabel, type Basis, type CoagulantType } from "@/core/coa
 import { WATER_PARAMS, MANUAL_METHOD_ID, type DoseMethod, type WaterKey } from "@/core/coagulation/doseMethod";
 import type { CoagResult } from "@/core/coagulation/calculate";
 import { fmt, toNum, NumField, TextField, Select, Seg, StatusPill, Messages } from "@/components/ui";
-import { loadCatalog, saveCatalog, emptyProduct, emptyMethod, newId, TYPES, type Catalog, type Product } from "@/lib/catalog";
+import { loadCatalog, saveCatalog, seedCatalog, normalizeCatalog, emptyProduct, emptyMethod, newId, TYPES, type Catalog, type Product } from "@/lib/catalog";
+import { useMe } from "@/lib/account";
+import { SaveCalc } from "@/components/SaveCalc";
 import { ProductEditor, MethodEditor, productErrors, typeLabel } from "./CatalogEditors";
 import { t } from "@/i18n/ru";
 
@@ -33,14 +35,37 @@ export default function CoagulationCalculator() {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(true);
+  const [lastInput, setLastInput] = useState<unknown>(null);
+  // где живёт справочник: браузер (без входа) или аккаунт; importOffer — в аккаунте пусто
+  const [store, setStore] = useState<"local" | "account">("local");
+  const [importOffer, setImportOffer] = useState(false);
+  const [sync, setSync] = useState<"ok" | "saving" | "error">("ok");
   const first = useRef(true);
+  const me = useMe();
 
-  // загрузка справочников из браузера
+  // справочник: сначала из браузера, после проверки входа — из аккаунта
   useEffect(() => {
     const c = loadCatalog();
     setCat(c);
     selectType(c, c.defaultType);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!me) return;
+    fetch("/api/catalog", { cache: "no-store" }).then((r) => r.json()).then((j) => {
+      if (j.catalog) {
+        const c = normalizeCatalog(j.catalog);
+        if (c) { setStore("account"); setCat(c); selectType(c, c.defaultType); first.current = true; }
+      } else { setStore("account"); setImportOffer(true); }
+    }).catch(() => setSync("error"));
+  }, [me]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function pushCatalog(c: Catalog) {
+    setSync("saving");
+    try {
+      const r = await fetch("/api/catalog", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ catalog: c }) });
+      setSync(r.ok ? "ok" : "error");
+    } catch { setSync("error"); }
+  }
 
   function selectType(c: Catalog, tp: CoagulantType) {
     setCoag(tp);
@@ -50,7 +75,11 @@ export default function CoagulationCalculator() {
     setMethodId(c.defaultMethod[tp] && meths.some((m) => m.id === c.defaultMethod[tp]) ? (c.defaultMethod[tp] as string) : MANUAL_METHOD_ID(tp));
     setEditProduct(null); setEditMethod(null); setRes(null); setAccepted("");
   }
-  const commit = (c: Catalog) => { setCat(c); setSaved(saveCatalog(c)); };
+  const commit = (c: Catalog) => {
+    setCat(c);
+    if (store === "account") { setImportOffer(false); pushCatalog(c); } else setSaved(saveCatalog(c));
+  };
+  const adopt = (c: Catalog) => { setImportOffer(false); setCat(c); selectType(c, c.defaultType); pushCatalog(c); };
 
   const P = PROFILES[coag];
   const products = cat?.products.filter((p) => p.coagulantType === coag) ?? [];
@@ -81,6 +110,7 @@ export default function CoagulationCalculator() {
       pumps: { pointPressureBar: toNum(pumps.p), extraLossBar: toNum(pumps.dp), marginPct: toNum(pumps.margin) },
       feso4OxidationStatus: ox === "auto" ? undefined : ox,
     };
+    setLastInput({ ...body, product: pr, methodName: method?.name ?? null });
     try {
       const r = await fetch("/api/coagulation/calculate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const j = await r.json();
@@ -122,8 +152,18 @@ export default function CoagulationCalculator() {
     <div className="page">
       <div className="eyebrow">Инструмент 1 · узел непосредственной коагуляции перед УФ</div>
       <h1>Коагуляция перед УФ</h1>
-      <p className="lead">Исходная вода → предфильтр и насос подачи → коррекция pH → коагулянт → смешение и контакт → УФ. Справочники продуктов и методик хранятся в этом браузере до появления входа в аккаунт. Начальные значения — <b>{t.demo}</b>.</p>
-      {!saved && <div className="msg warn small">Браузер не разрешает сохранять справочник: изменения действуют до закрытия страницы.</div>}
+      <p className="lead">Исходная вода → предфильтр и насос подачи → коррекция pH → коагулянт → смешение и контакт → УФ. {store === "account" ? "Справочники продуктов и методик хранятся в вашем аккаунте." : "Без входа справочники продуктов и методик хранятся в этом браузере."} Начальные значения — <b>{t.demo}</b>.</p>
+      {importOffer && cat && (
+        <div className="msg info">
+          В аккаунте ещё нет справочника. Перенести справочник из этого браузера ({cat.products.length} продукт., {cat.methods.filter((m) => m.model !== "manual").length} методик) или начать с демо-справочника?
+          <div className="btns" style={{ marginTop: 8 }}>
+            <button type="button" className="btn" onClick={() => adopt(loadCatalog())}>Перенести из браузера</button>
+            <button type="button" className="btn ghost" onClick={() => adopt(seedCatalog())}>Начать с демо</button>
+          </div>
+        </div>
+      )}
+      {store === "account" && sync === "error" && <div className="msg bad small">Не удалось сохранить справочник в аккаунте. Изменения действуют до закрытия страницы — повторите действие позже.</div>}
+      {store === "local" && !saved && <div className="msg warn small">Браузер не разрешает сохранять справочник: изменения действуют до закрытия страницы.</div>}
 
       {/* ===== Коагулянт ===== */}
       <div className="panel" style={{ marginBottom: 20 }}>
@@ -268,7 +308,7 @@ export default function CoagulationCalculator() {
           <div className="btns"><button className="btn" type="button" onClick={run} disabled={busy || !product}>{busy ? "Расчёт…" : "Рассчитать"}</button>{!product && <span className="small muted">Выберите или добавьте товарный продукт.</span>}</div>
         </div>
 
-        <div className="stack">{err ? <div className="msg bad">{err}</div> : res ? <Results r={res} coag={coag} /> : <div className="panel muted">Нажмите «Рассчитать».</div>}</div>
+        <div className="stack">{err ? <div className="msg bad">{err}</div> : res ? <><Results r={res} coag={coag} /><div className="panel"><h2>Сохранение</h2><SaveCalc me={me} kind="coagulation" input={lastInput} result={res} engine={(res as { engine?: string }).engine ?? "coag-core"} defaultTitle={`Коагуляция · ${typeLabel(coag)}${product ? " · " + product.name : ""}`} returnTo="/coagulation" /></div></> : <div className="panel muted">Нажмите «Рассчитать».</div>}</div>
       </div>
     </div>
   );

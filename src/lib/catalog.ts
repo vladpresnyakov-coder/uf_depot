@@ -1,7 +1,7 @@
 "use client";
 /**
  * Справочники пользователя: товарные коагулянты и методики дозы.
- * До появления входа и базы данных хранятся в браузере (localStorage) — только у этого пользователя на этом устройстве.
+ * Без входа — в браузере (localStorage); после входа через Telegram — в аккаунте (/api/catalog).
  */
 import type { Basis, CoagulantType } from "@/core/coagulation/profiles";
 import { PROFILES } from "@/core/coagulation/profiles";
@@ -97,17 +97,21 @@ export function seedCatalog(): Catalog {
   };
 }
 
+/** Проверка формы справочника; ручная доза всегда есть для каждого типа. */
+export function normalizeCatalog(v: unknown): Catalog | null {
+  const c = v as Catalog;
+  if (!c || c.version !== 1 || !Array.isArray(c.products) || !Array.isArray(c.methods)) return null;
+  for (const t of TYPES) if (!c.methods.some((m) => m.id === MANUAL_METHOD_ID(t))) c.methods.unshift(manualMethod(t));
+  c.defaultProduct ??= {};
+  c.defaultMethod ??= {};
+  if (!TYPES.includes(c.defaultType)) c.defaultType = "PACl";
+  return c;
+}
+
 export function loadCatalog(): Catalog {
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) {
-      const c = JSON.parse(raw) as Catalog;
-      if (c && c.version === 1 && Array.isArray(c.products) && Array.isArray(c.methods)) {
-        // ручная доза всегда есть для каждого типа
-        for (const t of TYPES) if (!c.methods.some((m) => m.id === MANUAL_METHOD_ID(t))) c.methods.unshift(manualMethod(t));
-        return c;
-      }
-    }
+    if (raw) { const c = normalizeCatalog(JSON.parse(raw)); if (c) return c; }
   } catch { /* хранилище недоступно — работаем с начальным справочником */ }
   return seedCatalog();
 }

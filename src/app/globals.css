@@ -148,3 +148,8 @@ a{color:var(--accent)}
 .tstage>header{display:flex;gap:10px;align-items:baseline;padding:9px 14px;border-bottom:1px solid var(--line);background:var(--soft);border-radius:6px 6px 0 0}
 .tstage>header b{font:600 12px var(--f-mono);color:var(--accent)}
 .foot{border-top:1px solid var(--line);color:var(--ink2);font-size:12px;padding:16px clamp(16px,3vw,32px)}
+pre.code{font:12px/1.45 var(--f-mono);background:var(--soft);border:1px solid var(--line);border-radius:4px;padding:10px;max-height:560px;overflow:auto;white-space:pre-wrap;word-break:break-word}
+.user{display:flex;align-items:center;gap:8px;font-size:13px}
+.user img{width:24px;height:24px;border-radius:50%}
+.user form{display:inline}
+.linkbtn{background:none;border:0;padding:0;color:var(--accent);cursor:pointer;font:inherit;text-decoration:underline}

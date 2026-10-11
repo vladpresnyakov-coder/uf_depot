@@ -2,6 +2,8 @@
 import { Fragment, useEffect, useState } from "react";
 import { fmt, toNum, NumField, Select, Seg, StatusPill } from "@/components/ui";
 import { t } from "@/i18n/ru";
+import { useMe } from "@/lib/account";
+import { SaveCalc } from "@/components/SaveCalc";
 
 type Resp = {
   engine: string; mode: "A" | "C"; ms: number;
@@ -31,6 +33,8 @@ export default function UfCalculator() {
   const [src, setSrc] = useState<Record<string, string>>({ "CEB1.1A": "UF", "CEB1.1B": "UF", CEB1: "UF", CEB2: "UF", CEB3: "UF" });
   const [res, setRes] = useState<Resp | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [lastInput, setLastInput] = useState<unknown>(null);
+  const me = useMe();
   const [busy, setBusy] = useState(false);
   const up = (k: string) => (x: string) => setV((s) => ({ ...s, [k]: x }));
 
@@ -41,6 +45,7 @@ export default function UfCalculator() {
       maxExt: toNum(v.maxExt), tFilt: toNum(v.tFilt), eta1: toNum(v.eta1), eta2: toNum(v.eta2), days: 365,
       supercycle: sc.map((r) => ({ n: toNum(r.n), ceb: r.ceb })), cebSources: src,
     };
+    setLastInput(body);
     try {
       const r = await fetch("/api/uf/calculate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const j = (await r.json()) as Resp;
@@ -103,7 +108,7 @@ export default function UfCalculator() {
           </div>
           <div className="btns"><button className="btn" type="button" onClick={run} disabled={busy}>{busy ? "Годовое моделирование…" : "Рассчитать"}</button></div>
         </div>
-        <div className="stack">{err ? <div className="msg bad">{err}</div> : res ? <UfResults r={res} /> : <div className="panel muted">Годовое моделирование…</div>}</div>
+        <div className="stack">{err ? <div className="msg bad">{err}</div> : res ? <><UfResults r={res} /><div className="panel"><h2>Сохранение</h2><SaveCalc me={me} kind="uf" input={lastInput} result={res} engine={res.engine} defaultTitle={`UF Calc · N=${res.layout.N}+${res.layout.X} · J=${fmt(res.J.final)}`} returnTo="/uf" /></div></> : <div className="panel muted">Годовое моделирование…</div>}</div>
       </div>
     </div>
   );
