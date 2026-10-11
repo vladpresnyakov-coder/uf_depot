@@ -4,9 +4,12 @@ import { fmt, toNum, NumField, Select, Seg, StatusPill } from "@/components/ui";
 import { t } from "@/i18n/ru";
 import { useMe } from "@/lib/account";
 import { SaveCalc } from "@/components/SaveCalc";
+import { fromParam, nf, readCoagToUf, sendToCoag, type CoagToUf } from "@/lib/link";
+import { useRouter } from "next/navigation";
 
 type Resp = {
-  engine: string; mode: "A" | "C"; ms: number;
+  engine: string; mode: "A" | "B" | "C"; ms: number;
+  sizing?: { mCalc: number; mAuto: number; m: number; userModules: boolean; keep: "feed" | "J"; J: number; feedPerUnit: number; notes: string[] } | null;
   layout: { N: number; X: number; modules: number; moduleArea: number; A_unit: number; A_work: number; A_installed: number; groups: number[][] };
   J: { initial: number; final: number };
   prelim: { feasible: boolean; area: number; specificNetM3hPerM2: number; cycleSeconds: number; linear: boolean } | null;
@@ -27,8 +30,10 @@ const SRC_OPTS: [string, string][] = [["UF", "ультрафильтрат"], ["
 const COL: Record<string, string> = { F: "#3d8fc4", ext: "#1f5f8a", FR: "#7fb6dc", FS: "#7fb6dc", RS: "#9aa7b0", FX: "#9aa7b0", FF: "#5b7f99", FFS: "#9aa7b0", BW: "#7356b5", CEB: "#c2417a", SOAK: "#e6a7c2", RINSE: "#a98bd6", W: "#c9d1d6" };
 
 export default function UfCalculator() {
-  const [mode, setMode] = useState<"A" | "C">("C");
-  const [v, setV] = useState<Record<string, string>>({ target: "250", J: "60", a: "60", m: "24", N: "4", X: "1", groups: "1", maxExt: "300", tFilt: "1800", eta1: "0,75", eta2: "0,90" });
+  const [mode, setMode] = useState<"A" | "B" | "C">("C");
+  const [v, setV] = useState<Record<string, string>>({ target: "250", J: "60", a: "60", m: "24", N: "4", X: "1", groups: "1", maxExt: "300", tFilt: "1800", eta1: "0,75", eta2: "0,90", feed: "", mB: "", keep: "feed" });
+  const [fromCoag, setFromCoag] = useState<CoagToUf | null>(null);
+  const router = useRouter();
   const [sc, setSc] = useState<{ n: string; ceb: string }[]>([{ n: "15", ceb: "CEB1.1A" }, { n: "10", ceb: "CEB3" }]);
   const [src, setSrc] = useState<Record<string, string>>({ "CEB1.1A": "UF", "CEB1.1B": "UF", CEB1: "UF", CEB2: "UF", CEB3: "UF" });
   const [res, setRes] = useState<Resp | null>(null);
@@ -38,11 +43,13 @@ export default function UfCalculator() {
   const [busy, setBusy] = useState(false);
   const up = (k: string) => (x: string) => setV((s) => ({ ...s, [k]: x }));
 
-  async function run() {
+  async function run(over?: { mode: "A" | "B" | "C"; v: Record<string, string> }) {
+    const md = over?.mode ?? mode, vv = over?.v ?? v;
     setBusy(true); setErr(null);
     const body = {
-      mode, target: toNum(v.target), J: toNum(v.J), moduleArea: toNum(v.a), modules: toNum(v.m), N: toNum(v.N), X: toNum(v.X), groups: toNum(v.groups),
-      maxExt: toNum(v.maxExt), tFilt: toNum(v.tFilt), eta1: toNum(v.eta1), eta2: toNum(v.eta2), days: 365,
+      mode: md, target: toNum(vv.target), J: toNum(vv.J), moduleArea: toNum(vv.a), modules: md === "B" ? toNum(vv.mB) : toNum(vv.m), N: toNum(vv.N), X: toNum(vv.X), groups: toNum(vv.groups),
+      feedPerUnit: md === "B" ? toNum(vv.feed) : undefined, keep: vv.keep,
+      maxExt: toNum(vv.maxExt), tFilt: toNum(vv.tFilt), eta1: toNum(vv.eta1), eta2: toNum(vv.eta2), days: 365,
       supercycle: sc.map((r) => ({ n: toNum(r.n), ceb: r.ceb })), cebSources: src,
     };
     setLastInput(body);
@@ -53,7 +60,22 @@ export default function UfCalculator() {
     } catch { setErr("Сервер расчёта недоступен."); }
     setBusy(false);
   }
-  useEffect(() => { run(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    // данные из узла коагуляции: подача при фильтрации на установку → подбор модулей (режим B)
+    const l = fromParam() === "coag" ? readCoagToUf() : null;
+    if (l) {
+      const N = l.N ?? (toNum(v.N) as number);
+      const feed = l.feedPerUnit ?? (l.totalFeed != null && N ? l.totalFeed / N : null);
+      const nv = { ...v, N: String(N), feed: feed != null ? String(Number(feed.toFixed(3))).replace(".", ",") : "", mB: "" };
+      setFromCoag(l); setMode("B"); setV(nv); run({ mode: "B", v: nv });
+    } else run();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toCoag = () => {
+    if (!res?.result) return;
+    sendToCoag({ N: res.layout.N, X: res.layout.X, feedPerUnit: res.result.Q1unit, totalFeed: res.result.Q1N, feedMax: res.result.feedMax, Qnet: res.result.Qnet, J: res.J.final, modules: res.layout.modules, moduleArea: res.layout.moduleArea });
+    router.push("/coagulation?from=uf");
+  };
 
   const usedCeb = [...new Set(sc.map((r) => r.ceb))];
   return (
@@ -65,17 +87,21 @@ export default function UfCalculator() {
         <div className="stack">
           <div className="panel">
             <h2>Режим расчёта</h2>
-            <Seg name="mode" value={mode} options={[["C", "Найти J по требуемому Qnet"], ["A", "Найти Qnet при заданном J"]]} onChange={setMode} />
+            <Seg name="mode" value={mode} options={[["C", "Найти J по Qnet и модулям"], ["B", "Подобрать модули по подаче и J"], ["A", "Найти Qnet при заданном J"]]} onChange={setMode} />
+            {fromCoag && mode === "B" && <div className="msg info small" style={{ marginTop: 10 }}>Из узла коагуляции ({new Date(fromCoag.at).toLocaleString("ru-RU")}): {fromCoag.N ?? "—"} раб. установок, подача при фильтрации {fromCoag.feedPerUnit != null ? nf(fromCoag.feedPerUnit) : "—"} м³/ч на установку{fromCoag.totalFeed != null ? `, всего ${nf(fromCoag.totalFeed)} м³/ч` : ""}.</div>}
             <div className="fields" style={{ marginTop: 12 }}>
               {mode === "C" && <NumField id="tg" label="Требуемый Qnet" unit="м³/ч" value={v.target} onChange={up("target")} required />}
-              <NumField id="j" label={mode === "C" ? "Исходный J" : "J"} unit="л/(м²·ч)" value={v.J} onChange={up("J")} required hint="ручной ввод: рекомендатель без источника отсутствует" />
+              {mode === "B" && <NumField id="feed" label="Подача исходной воды при фильтрации на одну установку" unit="м³/ч" value={v.feed} onChange={up("feed")} required hint={v.feed && toNum(v.N) ? `на все рабочие: ${nf((toNum(v.feed) ?? 0) * (toNum(v.N) ?? 0))} м³/ч` : "из узла коагуляции или вручную"} />}
+              <NumField id="j" label={mode === "C" ? "Исходный J" : mode === "B" ? "J расчётный" : "J"} unit="л/(м²·ч)" value={v.J} onChange={up("J")} required hint="ручной ввод: рекомендатель без источника отсутствует" />
+              {mode === "B" && <NumField id="mb" label="Модулей в установке (принято)" unit="шт." value={v.mB} onChange={up("mB")} placeholder="авто: ⌈расчётное⌉" hint="вторая итерация: например, чётное число" />}
+              {mode === "B" && <Select id="keep" label="При изменении числа модулей сохранить" value={v.keep as "feed"} options={[["feed", "подачу насоса — пересчитать J"], ["J", "J — пересчитать подачу"]]} onChange={up("keep")} />}
             </div>
           </div>
           <div className="panel">
             <h2>Компоновка</h2>
             <div className="fields">
               <NumField id="a" label="Площадь модуля a" unit="м²" value={v.a} onChange={up("a")} required hint="каталог не получен; пределы «не проверено»" />
-              <NumField id="m" label="Модулей в установке m" unit="шт." value={v.m} onChange={up("m")} required />
+              {mode !== "B" && <NumField id="m" label="Модулей в установке m" unit="шт." value={v.m} onChange={up("m")} required />}
               <NumField id="n" label="Рабочих установок N" unit="шт." value={v.N} onChange={up("N")} required />
               <NumField id="x" label="Резервных установок X" unit="шт." value={v.X} onChange={up("X")} required hint="не участвует в выработке и промывках" />
               <NumField id="g" label="Групп BW-станций" unit="шт." value={v.groups} onChange={up("groups")} required />
@@ -106,15 +132,16 @@ export default function UfCalculator() {
               <NumField id="e2" label="η2 — выход ОО-2" unit="доля" value={v.eta2} onChange={up("eta2")} hint="0,90 по ТЗ; концентрат ОО-2 возвращается на ОО-1" />
             </div>
           </div>
-          <div className="btns"><button className="btn" type="button" onClick={run} disabled={busy}>{busy ? "Годовое моделирование…" : "Рассчитать"}</button></div>
+          <div className="btns"><button className="btn" type="button" onClick={() => run()} disabled={busy}>{busy ? "Годовое моделирование…" : "Рассчитать"}</button></div>
         </div>
-        <div className="stack">{err ? <div className="msg bad">{err}</div> : res ? <><UfResults r={res} /><div className="panel"><h2>Сохранение</h2><SaveCalc me={me} kind="uf" input={lastInput} result={res} engine={res.engine} defaultTitle={`UF Calc · N=${res.layout.N}+${res.layout.X} · J=${fmt(res.J.final)}`} returnTo="/uf" /></div></> : <div className="panel muted">Годовое моделирование…</div>}</div>
+        <div className="stack">{err ? <div className="msg bad">{err}</div> : res ? <><UfResults r={res} onModules={(m) => { const nv = { ...v, mB: String(m) }; setV(nv); run({ mode: "B", v: nv }); }} />
+              {res.result && <div className="panel"><h2>Узел коагуляции</h2><p className="small" style={{ marginTop: 0 }}>Передать в расчёт коагуляции: {res.layout.N} раб. установок × {nf(res.result.Q1unit)} м³/ч при фильтрации = {nf(res.result.Q1N)} м³/ч; максимум подачи исходной воды {nf(res.result.feedMax)} м³/ч.</p><div className="btns" style={{ marginTop: 6 }}><button type="button" className="btn" onClick={toCoag}>Рассчитать узел коагуляции →</button></div></div>}<div className="panel"><h2>Сохранение</h2><SaveCalc me={me} kind="uf" input={lastInput} result={res} engine={res.engine} defaultTitle={`UF Calc · N=${res.layout.N}+${res.layout.X} · J=${fmt(res.J.final)}`} returnTo="/uf" /></div></> : <div className="panel muted">Годовое моделирование…</div>}</div>
       </div>
     </div>
   );
 }
 
-function UfResults({ r }: { r: Resp }) {
+function UfResults({ r, onModules }: { r: Resp; onModules: (m: number) => void }) {
   if (!r.result) return (
     <div className="panel"><h2>Решение не найдено</h2><div className="msg bad">При J в пределах {r.solver?.bounds.join("–")} л/(м²·ч) требуемый Qnet недостижим{r.solver?.deficit ? `; дефицит при верхней границе ${fmt(r.solver.deficit, 2)} м³/ч` : ""}. Увеличьте N или m или измените режимы.</div></div>
   );
@@ -129,6 +156,20 @@ function UfResults({ r }: { r: Resp }) {
         <div className="kcard"><div className="k">Q2 · СРЕДНИЙ ЗАБОР</div><div className="v">{fmt(s.Q2, 1)}</div><div className="u">м³/ч за год</div><div className="d">только фильтрация {fmt(s.Q2filt, 1)} м³/ч</div></div>
         <div className="kcard" style={{ borderColor: "var(--accent)" }}><div className="k">QNET · ПОЛЕЗНАЯ УФ</div><div className="v">{fmt(s.Qnet, 1)}</div><div className="u">м³/ч среднегодовая</div><div className="d">{fmt(s.Vnet / s.days, 0)} м³/сут; сутки {fmt(s.dayNetMin, 0)}–{fmt(s.dayNetMax, 0)}</div></div>
       </div>
+
+      {r.sizing && (() => { const z = r.sizing; const even = z.m % 2 ? z.m + 1 : null; const down = z.m - 1 >= 1 && z.m % 2 ? z.m - 1 : null; return (
+        <div className="panel">
+          <h2>Подбор модулей</h2>
+          <dl className="kv">
+            <dt>Расчётное m</dt><dd>{fmt(z.mCalc, 2)} = Q1·1000 / (J·a)</dd>
+            <dt>Округлено вверх</dt><dd>{z.mAuto} шт.</dd>
+            <dt>Принято</dt><dd>{z.m} шт.{z.userModules ? " (задано пользователем)" : ""}</dd>
+            <dt>J фактический</dt><dd>{fmt(z.J, 2)} л/(м²·ч)</dd>
+            <dt>Подача при фильтрации</dt><dd>{fmt(z.feedPerUnit, 2)} м³/ч на установку</dd>
+          </dl>
+          <ul className="small" style={{ paddingLeft: 18, margin: "8px 0 0" }}>{z.notes.map((n, i) => <li key={i}>{n}</li>)}<li>Собственные нужды (FF, BW, CEB) пересчитаны по новой площади установки и J — Qnet изменился.</li></ul>
+          {(even || down) && <div className="btns" style={{ marginTop: 8 }}>{even && <button type="button" className="btn ghost" onClick={() => onModules(even)}>Пересчитать с m = {even} (чётное)</button>}{down && <button type="button" className="btn ghost" onClick={() => onModules(down)}>m = {down}</button>}</div>}
+        </div>); })()}
 
       <div className="panel">
         <h2>Компоновка и J</h2>

@@ -1,6 +1,7 @@
 import { forward, prelimArea, solveJ, UF_ENGINE_VERSION } from "@/core/uf/engine";
 import { applySources, defaultRecipes, DRAIN_LABELS } from "@/core/uf/templates";
 import type { SimParams } from "@/core/uf/types";
+import { sizeModules, type SizingResult } from "@/core/uf/sizing";
 import { errorResponse, InputError, num, oneOf, readJson } from "@/lib/validate";
 
 export const maxDuration = 120;
@@ -10,12 +11,21 @@ const CEB_KEYS = ["CEB1.1A", "CEB1.1B", "CEB1", "CEB2", "CEB3"] as const;
 export async function POST(req: Request) {
   try {
     const b = await readJson(req);
-    const mode = oneOf(b.mode, "режим", ["A", "C"] as const);
+    const mode = oneOf(b.mode, "режим", ["A", "B", "C"] as const);
     const N = num(b.N, "N", { min: 1, max: 40, int: true }) as number;
     const X = num(b.X, "X", { min: 0, max: 40, int: true }) as number;
     const a = num(b.moduleArea, "площадь модуля", { min: 0.1, max: 500 }) as number;
-    const m = num(b.modules, "модулей в установке", { min: 1, max: 500, int: true }) as number;
-    const J = num(b.J, "J", { min: 1, max: 300 }) as number;
+    let m: number, J = num(b.J, "J", { min: 1, max: 300 }) as number;
+    let sizing: SizingResult | null = null;
+    if (mode === "B") {
+      // подбор модулей по подаче исходной воды при фильтрации на одну установку
+      const feed = num(b.feedPerUnit, "подача исходной воды на установку", { min: 0.1, max: 10000 }) as number;
+      const mUser = num(b.modules, "модулей в установке", { min: 1, max: 500, int: true, optional: true });
+      sizing = sizeModules({ feedPerUnit: feed, J, moduleArea: a, modules: mUser, keep: oneOf(b.keep ?? "feed", "что сохранить", ["feed", "J"] as const) });
+      if (sizing.m > 500) throw new InputError(`Расчётное число модулей ${sizing.m} > 500: увеличьте J, площадь модуля или число установок.`);
+      if (sizing.J < 1 || sizing.J > 300) throw new InputError(`J = ${sizing.J.toFixed(1)} л/(м²·ч) вне 1–300: измените число модулей.`);
+      m = sizing.m; J = sizing.J;
+    } else m = num(b.modules, "модулей в установке", { min: 1, max: 500, int: true }) as number;
     const nGroups = num(b.groups, "групп BW", { min: 1, max: N, int: true }) as number;
     const maxExt = num(b.maxExt, "продление", { min: 0, max: 7200 }) as number;
     const tFilt = num(b.tFilt, "длительность фильтрации", { min: 60, max: 36000 }) as number;
@@ -73,7 +83,8 @@ export async function POST(req: Request) {
     return Response.json({
       engine: UF_ENGINE_VERSION, mode, ms: Date.now() - t0,
       layout: { N, X, modules: m, moduleArea: a, A_unit, A_work: N * A_unit, A_installed: (N + X) * A_unit, groups },
-      J: { initial: J, final: Jfinal },
+      J: { initial: sizing ? (num(b.J, "J") as number) : J, final: Jfinal },
+      sizing,
       prelim, solver,
       result: {
         Q1unit: s.Q1unit, Q1N: s.Q1N, Q2: s.Q2, Q2filt: s.Q2filt, Qnet: s.Qnet, Vnet: s.Vnet, days: s.days,

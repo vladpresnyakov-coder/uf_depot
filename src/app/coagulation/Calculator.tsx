@@ -9,6 +9,8 @@ import { useMe } from "@/lib/account";
 import { SaveCalc } from "@/components/SaveCalc";
 import { BuiltinCard } from "@/components/BuiltinCard";
 import { JarPanel } from "./JarPanel";
+import { fromParam, nf, readUfToCoag, sendToUf, type UfToCoag } from "@/lib/link";
+import { useRouter } from "next/navigation";
 import { metalFraction } from "@/core/coagulation/profiles";
 import { builtinAsMethod, builtinById, builtinsFor, defaultOptions, recommendedBuiltin, OBJECT_TYPES, STATUS_LABEL, type ObjectType, type Opts } from "@/core/coagulation/normative";
 
@@ -42,6 +44,8 @@ export default function CoagulationCalculator() {
   const [accepted, setAccepted] = useState("");
   const [bOpts, setBOpts] = useState<Record<string, Opts>>({});
   const [objType, setObjType] = useState<ObjectType>("other");
+  const [fromUf, setFromUf] = useState<UfToCoag | null>(null);
+  const router = useRouter();
   const [flow, setFlow] = useState<S>({ mode: "uf", trains: "3", perTrain: "40", nom: "120", min: "", max: "", minO: "", maxO: "" });
   const [water, setWater] = useState<Partial<Record<WaterKey, string>>>(DEMO_WATER);
   const [ph, setPh] = useState<S>({ mode: "none", reagent: "NaOH", method: "manual", d100: "", target: "", w: "0,46", rho: "1,49", wc: "50" });
@@ -63,6 +67,13 @@ export default function CoagulationCalculator() {
 
   // справочник: сначала из браузера, после проверки входа — из аккаунта
   useEffect(() => {
+    // расход из UF Calc: рабочие установки и подача при фильтрации на установку
+    const l = fromParam() === "uf" ? readUfToCoag() : null;
+    if (l) {
+      const s3 = (x: number) => String(Number(x.toFixed(3))).replace(".", ",");
+      setFlow((f) => ({ ...f, mode: "uf", trains: String(l.N), perTrain: s3(l.feedPerUnit), minO: "", maxO: l.feedMax > l.totalFeed * 1.001 ? s3(l.feedMax) : "" }));
+      setFromUf(l);
+    }
     const c = loadCatalog();
     setCat(c);
     selectType(c, c.defaultType);
@@ -265,6 +276,7 @@ export default function CoagulationCalculator() {
           {/* ===== Расход ===== */}
           <div className="panel">
             <h2>Расход исходной воды</h2>
+            {fromUf && <div className="msg info small">Из UF Calc ({new Date(fromUf.at).toLocaleString("ru-RU")}): {fromUf.N} раб. + {fromUf.X} рез. установок, {fromUf.modules} × {nf(fromUf.moduleArea)} м², J = {nf(fromUf.J)} л/(м²·ч); подача при фильтрации {nf(fromUf.feedPerUnit)} м³/ч на установку, всего {nf(fromUf.totalFeed)} м³/ч; Qnet = {nf(fromUf.Qnet, 1)} м³/ч.{flow.mode !== "uf" || toNum(flow.trains) !== fromUf.N || Math.abs((toNum(flow.perTrain) ?? 0) - fromUf.feedPerUnit) > 1e-3 ? " Расход изменён после передачи." : ""}</div>}
             <Seg name="flowmode" value={flow.mode} options={[["coag", "Только коагуляция"], ["uf", "С установками УФ"]]} onChange={upS(setFlow, "mode")} />
             {flow.mode === "coag" ? (
               <div className="fields" style={{ marginTop: 12 }}>
@@ -280,6 +292,14 @@ export default function CoagulationCalculator() {
                 <NumField id="qxo" label="Qmax вручную" unit="м³/ч" value={flow.maxO} onChange={upS(setFlow, "maxO")} placeholder="= Qном" />
               </div>
             )}
+            <div className="btns">
+              <button type="button" className="btn ghost" onClick={() => {
+                const uf = flow.mode === "uf", N = uf ? toNum(flow.trains) : null, per = uf ? toNum(flow.perTrain) : null;
+                sendToUf({ N, feedPerUnit: per, totalFeed: uf ? (N != null && per != null ? N * per : null) : toNum(flow.nom) });
+                router.push("/uf?from=coag");
+              }}>Подобрать модули УФ по этой подаче →</button>
+            </div>
+            <p className="footnote">{flow.mode === "uf" ? "В UF Calc передаются число рабочих установок и подача исходной воды при фильтрации на одну установку." : "В UF Calc передаётся общий расход; подача на установку = Qном / N (N задаётся в UF Calc)."}</p>
           </div>
 
           {/* ===== Доза ===== */}

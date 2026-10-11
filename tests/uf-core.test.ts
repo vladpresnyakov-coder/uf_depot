@@ -143,3 +143,24 @@ describe("§24.2 функциональные проверки", () => {
     expect(h.complete && h.H).toBeCloseTo((1.5e5) / (998 * 9.80665), 6);
   });
 });
+
+import { sizeModules } from "@/core/uf/sizing";
+describe("режим B: подбор модулей по подаче и J", () => {
+  it("расчётное m и округление вверх; подача сохранена — J пересчитан", () => {
+    const r = sizeModules({ feedPerUnit: 40, J: 60, moduleArea: 60, keep: "feed" }); // 40000/3600 = 11,11
+    expect(r.mCalc).toBeCloseTo(11.111, 3);
+    expect(r.m).toBe(12);
+    expect(r.J).toBeCloseTo(40000 / 720, 9); // 55,56
+    expect(r.feedPerUnit).toBe(40);
+  });
+  it("вторая итерация: пользователь задаёт чётное число; J сохранён — подача пересчитана", () => {
+    const r = sizeModules({ feedPerUnit: 40, J: 60, moduleArea: 60, modules: 14, keep: "J" });
+    expect(r.m).toBe(14);
+    expect(r.J).toBe(60);
+    expect(r.feedPerUnit).toBeCloseTo(50.4, 9);
+    expect(r.notes.some((n) => n.includes("изменено пользователем"))).toBe(true);
+  });
+  it("целое расчётное m не округляется лишний раз", () => {
+    expect(sizeModules({ feedPerUnit: 36, J: 50, moduleArea: 60, keep: "feed" }).m).toBe(12);
+  });
+});
