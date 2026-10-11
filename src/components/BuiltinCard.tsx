@@ -2,22 +2,25 @@ import { STATUS_LABEL, SECONDARY_NOTE, type BuiltinDef } from "@/core/coagulatio
 import { PROFILES, type CoagulantType } from "@/core/coagulation/profiles";
 import { WATER_PARAMS, type WaterKey } from "@/core/coagulation/doseMethod";
 
-const PILL: Record<BuiltinDef["status"], string> = { normative: "s-balance", reference: "s-user", superseded: "s-clarify" };
+const PILL: Record<BuiltinDef["status"], string> = { normative: "s-balance", reference: "s-user", superseded: "s-clarify", adapted: "s-clarify" };
 
 /** Карточка встроенной методики: документ, пункт, статус, формула, входы, предупреждения, цитаты из приложенного файла. */
 export function BuiltinCard({ d, compact = false }: { d: BuiltinDef; compact?: boolean }) {
-  const inputs = [...new Set(d.options.length ? ["max", "turbidity", "color"].flatMap((m) => d.required({ mode: m })) : d.required({}))] as WaterKey[];
+  const inputs = [...new Set(["max", "turbidity", "color"].flatMap((m) => d.required({ mode: m })))] as WaterKey[];
   return (
     <div className="small" style={{ marginTop: 10 }}>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
         <span className={`pill ${PILL[d.status]}`}>{STATUS_LABEL[d.status]}</span>
         {d.formulaCheck === "secondary" && <span className="pill s-clarify">формула: требуется сверка</span>}
+        {d.adapted?.length ? <span className="pill s-clarify">есть инженерная адаптация</span> : null}
       </div>
+      {d.statusNote && <p style={{ margin: "0 0 6px" }}>{d.statusNote}</p>}
+      {d.adapted?.map((a, i) => <p key={i} className="muted" style={{ margin: "0 0 6px" }}>Адаптация: {a}.</p>)}
       <dl className="kv">
         <dt>Документ</dt><dd style={{ fontFamily: "var(--f-body)", textAlign: "right" }}>{d.doc}</dd>
         <dt>Пункт</dt><dd style={{ fontFamily: "var(--f-body)", textAlign: "right" }}>{d.clause}</dd>
         <dt>Коагулянты</dt><dd style={{ fontFamily: "var(--f-body)", textAlign: "right" }}>{(Object.entries(d.coagulants) as [CoagulantType, string][]).map(([t, h]) => `${PROFILES[t].label}${h === "equivalent" ? " (пересчёт по эквиваленту)" : ""}`).join("; ")}</dd>
-        <dt>Входы</dt><dd style={{ fontFamily: "var(--f-body)", textAlign: "right" }}>{inputs.map((k) => `${WATER_PARAMS[k].label}${WATER_PARAMS[k].unit ? `, ${WATER_PARAMS[k].unit}` : ""}`).join("; ")}</dd>
+        <dt>Входы</dt><dd style={{ fontFamily: "var(--f-body)", textAlign: "right" }}>{inputs.length === 0 ? "результаты пробного коагулирования / параметры пересчёта" : null}{inputs.map((k) => `${WATER_PARAMS[k].label}${WATER_PARAMS[k].unit ? `, ${WATER_PARAMS[k].unit}` : ""}`).join("; ")}</dd>
         {d.fileRef && <><dt>Файл</dt><dd style={{ textAlign: "right" }}>{d.fileRef.file}<br /><span className="muted">источник текста: {d.fileRef.origin}</span></dd></>}
       </dl>
       <p style={{ margin: "8px 0 4px" }}><b>Формула:</b> <span className="mono">{d.formula}</span></p>

@@ -97,7 +97,7 @@ describe("справочные методики", () => {
       expect(d.doc && d.clause && d.status).toBeTruthy();
       const t = Object.keys(d.coagulants)[0] as CoagulantType;
       const w = { color: 30, turbidityMg: 50, permanganate: 8, toc: 4, alkalinity: 2, pH: 7 };
-      const r = run(d.id, t, w, { poTarget: "3" });
+      const r = run(d.id, t, w, { poTarget: "3", dSA: "40", k: "1" });
       expect(r.status).toBe("ok");
       expect(r.warnings!.some((x) => x.includes("пробной коагуляцией"))).toBe(true);
     }

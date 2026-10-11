@@ -6,6 +6,7 @@
 import type { Basis, CoagulantType } from "@/core/coagulation/profiles";
 import { PROFILES } from "@/core/coagulation/profiles";
 import { MANUAL_METHOD_ID, type DoseMethod } from "@/core/coagulation/doseMethod";
+import { NORMS_SANPIN, type JarTest, type NormSet } from "@/core/coagulation/jar";
 
 export interface Product {
   id: string;
@@ -21,6 +22,8 @@ export interface Product {
   density: number | null;
   basicity: number | null;
   basicityDefinition: string;
+  /** Марка ПОХА по ГОСТ 34879-2022: НО / СО / ВО (низко-, средне-, высокоосновный); значение основности — из паспорта. */
+  pohaGrade?: "" | "НО" | "СО" | "ВО";
   freeAcidity: number | null;
   fe2Share: number | null;
   workingPreparation: string;
@@ -37,6 +40,10 @@ export interface Catalog {
   methods: DoseMethod[];
   defaultProduct: Partial<Record<CoagulantType, string>>;
   defaultMethod: Partial<Record<CoagulantType, string>>;
+  /** Опыты пробного коагулирования (ГОСТ Р 51642-2000, прил. А). */
+  jarTests?: JarTest[];
+  /** Нормативы для выбора оптимальной дозы — редактируемый справочник. */
+  norms?: NormSet;
 }
 
 const KEY = "ufdepot.catalog.v1";
@@ -95,6 +102,7 @@ export function seedCatalog(): Catalog {
     version: 1, defaultType: "PACl", products, methods,
     defaultProduct: { PACl: "demo-PACl", "Al2(SO4)3": "demo-Al2(SO4)3", FeCl3: "demo-FeCl3", FeSO4: "demo-FeSO4" },
     defaultMethod: Object.fromEntries(TYPES.map((t) => [t, MANUAL_METHOD_ID(t)])),
+    jarTests: [], norms: structuredClone(NORMS_SANPIN),
   };
 }
 
@@ -105,6 +113,8 @@ export function normalizeCatalog(v: unknown): Catalog | null {
   for (const t of TYPES) if (!c.methods.some((m) => m.id === MANUAL_METHOD_ID(t))) c.methods.unshift(manualMethod(t));
   c.defaultProduct ??= {};
   c.defaultMethod ??= {};
+  if (!Array.isArray(c.jarTests)) c.jarTests = [];
+  if (!c.norms || !c.norms.limits) c.norms = structuredClone(NORMS_SANPIN);
   if (!TYPES.includes(c.defaultType)) c.defaultType = "PACl";
   return c;
 }

@@ -1,3 +1,4 @@
+import type { JarTest, NormSet } from "./jar";
 import { ATOMIC, isNum } from "../units/chem";
 import { PROFILES, metalFraction, basisLabel, type Basis, type CoagulantType } from "./profiles";
 import { evaluateMethod, assessPhCorrection, type DoseMethod, type WaterQuality, type MethodResult } from "./doseMethod";
@@ -34,7 +35,7 @@ export interface CoagInput {
   coagulant: CoagulantType;
   passport: Passport;
   flow: FlowInput;
-  dose: { mode?: "manual" | "method"; method?: DoseMethod | null; options?: Record<string, string>; accepted?: number | null; min: number | null; nom: number | null; max: number | null; basis: Basis; hydrateN?: number | null };
+  dose: { mode?: "manual" | "method"; method?: DoseMethod | null; options?: Record<string, string>; jar?: { tests: JarTest[]; norms: NormSet }; accepted?: number | null; min: number | null; nom: number | null; max: number | null; basis: Basis; hydrateN?: number | null };
   water: WaterQuality & { oxidant?: string | null };
   ph: {
     mode: "none" | "acid" | "base" | "unknown";
@@ -106,7 +107,7 @@ export function calculateCoagulation(inp: CoagInput) {
   let d = { ...dIn };
   const stage1: TraceRow[] = [];
   if (dIn.mode === "method" && dIn.method && dIn.method.model !== "manual") {
-    method = evaluateMethod(dIn.method, inp.water, { w_me: wProd, basicity: pp.basicity ?? null, density: pp.density ?? null }, dIn.options ?? {});
+    method = evaluateMethod(dIn.method, inp.water, { w_me: wProd, basicity: pp.basicity ?? null, density: pp.density ?? null }, dIn.options ?? {}, dIn.jar);
     for (const x of method.warnings ?? []) W.push(["warn", x]);
     for (const x of method.info ?? []) W.push(["info", x]);
     stage1.push(...method.rows.map((r) => ({ label: r.label, formula: r.formula, result: r.result, origin: "rule" as Origin })));

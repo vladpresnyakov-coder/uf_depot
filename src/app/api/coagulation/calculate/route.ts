@@ -2,6 +2,7 @@ import { calculateCoagulation, type CoagInput } from "@/core/coagulation/calcula
 import type { Basis, CoagulantType } from "@/core/coagulation/profiles";
 import { errorResponse, InputError, num, oneOf, readJson, str } from "@/lib/validate";
 import { builtinAsMethod, builtinById } from "@/core/coagulation/normative";
+import { JAR_PARAMS, SEASONS, type JarKey, type JarTest, type NormSet } from "@/core/coagulation/jar";
 import { WATER_PARAMS, PRODUCT_PARAMS, type DoseMethod, type WaterQuality, type WaterKey } from "@/core/coagulation/doseMethod";
 
 const COAG = ["PACl", "Al2(SO4)3", "FeCl3", "Fe2(SO4)3", "FeSO4"] as const;
@@ -17,7 +18,8 @@ function parseMethod(v: unknown, coagulant: CoagulantType): DoseMethod | null {
   if (m.model === "builtin") {
     // встроенная методика строится из кода по идентификатору; данные клиента не используются
     const def = builtinById(str(m.builtinId, 80));
-    if (!def || !def.coagulants[coagulant]) throw new InputError("Встроенная методика не найдена или не применяется к выбранному коагулянту.");
+    if (!def) throw new InputError("Встроенная методика не найдена.");
+    if (!def.coagulants[coagulant]) throw new InputError(def.notApplicable?.[coagulant] ?? "Встроенная методика не применяется к выбранному коагулянту.");
     return builtinAsMethod(def, coagulant);
   }
   const opt = { optional: true } as const;
@@ -44,6 +46,28 @@ function parseOptions(v: unknown): Record<string, string> {
   if (!v || typeof v !== "object") return out;
   for (const [k, x] of Object.entries(v as R).slice(0, 20)) if (/^[A-Za-z]{1,20}$/.test(k) && (typeof x === "string" || typeof x === "number")) out[k] = String(x).slice(0, 40);
   return out;
+}
+
+/** Данные пробного коагулирования: только числа и перечисления, ограниченные размеры. */
+function parseJar(v: unknown): { tests: JarTest[]; norms: NormSet } | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const j = v as R, opt = { optional: true } as const;
+  const keys = Object.keys(JAR_PARAMS) as JarKey[];
+  const n = (j.norms ?? {}) as R, lim = (n.limits ?? {}) as R;
+  const norms: NormSet = {
+    name: str(n.name, 120), source: str(n.source, 300),
+    limits: Object.fromEntries(keys.map((k) => { const l = (lim[k] ?? {}) as R; return [k, { active: l.active === true, max: num(l.max, `норматив ${k} max`, opt), min: num(l.min, `норматив ${k} min`, opt) }]; })) as NormSet["limits"],
+  };
+  const tests: JarTest[] = (Array.isArray(j.tests) ? (j.tests as R[]) : []).slice(0, 60).map((t, i) => ({
+    id: str(t.id, 40), date: str(t.date, 20), season: oneOf(t.season ?? "other", `период опыта ${i + 1}`, SEASONS.map((s) => s[0])),
+    temperature: num(t.temperature, `температура опыта ${i + 1}`, { min: -5, max: 60, ...opt }),
+    coagulantType: oneOf(t.coagulantType, `коагулянт опыта ${i + 1}`, COAG), productName: str(t.productName, 120), source: {}, note: str(t.note, 300),
+    rows: (Array.isArray(t.rows) ? (t.rows as R[]) : []).slice(0, 40).map((r, k) => {
+      const vals = (r.values ?? {}) as R;
+      return { dose: num(r.dose, `доза, опыт ${i + 1}, строка ${k + 1}`, { min: 0, max: 1000, ...opt }), values: Object.fromEntries(keys.map((key) => [key, num(vals[key], `${JAR_PARAMS[key].label}, опыт ${i + 1}, строка ${k + 1}`, { min: 0, ...opt })])) };
+    }),
+  }));
+  return { tests, norms };
 }
 
 function parseWater(w: R): WaterQuality & { oxidant?: string | null } {
@@ -79,7 +103,7 @@ function parseInput(b: R): CoagInput {
       ? { mode: "uf", trains: num(fl.trains, "число установок", { min: 1, max: 100, int: true }), perTrain: num(fl.perTrain, "подача на установку", { min: 0 }), minOverride: num(fl.minOverride, "Qmin", { min: 0, ...opt }), maxOverride: num(fl.maxOverride, "Qmax", { min: 0, ...opt }) }
       : { mode: "coag", nom: num(fl.nom, "Qном", { min: 0 }), min: num(fl.min, "Qmin", { min: 0, ...opt }), max: num(fl.max, "Qmax", { min: 0, ...opt }) },
     dose: {
-      mode: d.mode === "method" ? "method" : "manual", method: d.mode === "method" ? parseMethod(d.method, b.coagulant as CoagulantType) : null, options: parseOptions(d.options), accepted: num(d.accepted, "принятая доза", { min: 0, ...opt }),
+      mode: d.mode === "method" ? "method" : "manual", method: d.mode === "method" ? parseMethod(d.method, b.coagulant as CoagulantType) : null, options: parseOptions(d.options), jar: parseJar(d.jar), accepted: num(d.accepted, "принятая доза", { min: 0, ...opt }),
       min: num(d.min, "Dmin", { min: 0, ...opt }), nom: num(d.nom, "Dном", { min: 0, ...opt }), max: num(d.max, "Dmax", { min: 0, ...opt }), basis: oneOf(d.basis, "база дозы", BASES as readonly Basis[]), hydrateN: num(d.hydrateN, "n гидрата дозы", { min: 0, max: 30, ...opt }),
     },
     water: parseWater(w),
@@ -99,7 +123,7 @@ function parseInput(b: R): CoagInput {
 
 export async function POST(req: Request) {
   try {
-    const input = parseInput(await readJson(req));
+    const input = parseInput(await readJson(req, 512_000));
     return Response.json({ input, result: calculateCoagulation(input) });
   } catch (e) {
     return errorResponse(e);

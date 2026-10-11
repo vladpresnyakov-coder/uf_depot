@@ -5,9 +5,11 @@
  */
 import { ATOMIC, isNum } from "../units/chem";
 import { PROFILES, type Basis, type CoagulantType } from "./profiles";
-import type { DoseMethod, MethodResult, WaterKey, WaterQuality } from "./doseMethod";
+import type { DoseMethod, MethodResult, ProductVars, WaterKey, WaterQuality } from "./doseMethod";
+import { metalFraction } from "./profiles";
+import { seasonalDesign, workingSolutionMass, SEASONS, type JarTest, type NormSet } from "./jar";
 
-export type DocStatus = "normative" | "reference" | "superseded";
+export type DocStatus = "normative" | "reference" | "superseded" | "adapted";
 export type FormulaCheck = "text" | "secondary";
 
 export interface BuiltinOption {
@@ -42,12 +44,21 @@ export interface BuiltinDef {
   required: (o: Opts) => WaterKey[];
   phWindow?: (t: CoagulantType) => { min: number; max: number; source: string } | null;
   recommendedFor?: ObjectType;
+  /** Рекомендация с учётом типа коагулянта (перекрывает recommendedFor). */
+  recommended?: Partial<Record<ObjectType, CoagulantType[]>>;
+  /** Пояснение статуса (например, нормативная для ТЭС, справочная для ВОС). */
+  statusNote?: string;
+  /** Части расчёта со статусом «инженерная адаптация». */
+  adapted?: string[];
+  /** Сообщение для типов коагулянта, к которым методика не применяется. */
+  notApplicable?: Partial<Record<CoagulantType, string>>;
   warnings: string[];
   quotes: Quote[];
-  evaluate: (t: CoagulantType, w: WaterQuality, o: Opts) => MethodResult;
+  evaluate: (t: CoagulantType, w: WaterQuality, o: Opts, ctx?: Ctx) => MethodResult;
 }
 
 export type Opts = Record<string, string>;
+export interface Ctx { product?: ProductVars; jar?: { tests: JarTest[]; norms: NormSet } }
 export type ObjectType = "vos" | "tes" | "other";
 export const OBJECT_TYPES: [ObjectType, string][] = [
   ["vos", "ВОС: хозяйственно-питьевое / производственное водоснабжение"],
@@ -126,6 +137,7 @@ const snip: BuiltinDef = {
   formulaCheck: "secondary",
   outputBasis: () => "salt",
   recommendedFor: "vos",
+  notApplicable: { PACl: "Методика не распространяется на ПОХА: п. 6.16 СНиП 2.04.02-84* относится только к Al₂(SO₄)₃, FeCl₃, Fe₂(SO₄)₃ по безводному веществу." },
   options: [
     { key: "mode", label: "Определяющий показатель", kind: "select", default: "max", choices: [["max", "мутность и цветность — большая из доз (прим. к п. 6.16)"], ["turbidity", "только мутность — мутные воды (табл. 16)"], ["color", "только цветность — цветные воды (ф. 6)"]] },
     { key: "bound", label: "Значение из диапазона табл. 16", kind: "select", default: "mid", choices: [["low", "нижняя граница (грубодисперсная взвесь, прим. 1)"], ["mid", "середина диапазона"], ["high", "верхняя граница"]] },
@@ -147,7 +159,7 @@ const snip: BuiltinDef = {
   evaluate(t, w, o) {
     const r = empty("salt");
     const P = PROFILES[t];
-    if (!this.coagulants[t]) { r.status = "invalid"; r.errors.push(`Методика не применяется к ${P.label}.`); return r; }
+    if (!this.coagulants[t]) { r.status = "invalid"; r.errors.push(this.notApplicable?.[t] ?? `Методика не применяется к ${P.label}.`); return r; }
     const mode = o.mode ?? "max", bound = o.bound ?? "mid", facility = o.facility ?? "settler";
     const keys: [WaterKey, string, string][] = [];
     if (mode !== "turbidity") keys.push(["color", "Цветность Ц", "град"]);
@@ -334,7 +346,212 @@ const zxr: BuiltinDef = {
   },
 };
 
-export const BUILTIN_METHODS: BuiltinDef[] = [snip, rd, rodriguez, zxr];
+/* ---------------- ПОХА (полиоксихлорид алюминия) по ГОСТ 34879-2022 ---------------- */
+
+/** Коэффициент пересчёта Al₂O₃ на Al (ГОСТ 34879-2022, прил. Ж). */
+export const AL2O3_TO_AL = 0.5292;
+/** Кщ по СНиП 2.04.02-84*, п. 6.19 (СП 31.13330.2021, п. 9.16): известь по CaO — 28, сода по Na₂CO₃ — 53. */
+export const K_ALK = { CaO: 28, Na2CO3: 53 } as const;
+export const ALK_ADAPT_NOTE = "Замена Дк/ек на ΔЩ — инженерная адаптация для ПОХА; в нормативе эквивалентные массы даны только для сульфата алюминия и солей железа.";
+const PRELIM_BANNER = "Предварительная оценка, не является проектной дозой по ГОСТ Р 51642-2000.";
+
+/** Массовая доля Al₂O₃ в товарном продукте, % — из доли металла паспорта. */
+function cAl2O3(t: CoagulantType, ctx?: Ctx): number {
+  const wme = ctx?.product?.w_me;
+  return isNum(wme) ? (wme / metalFraction(t, "Al2O3")) * 100 : NaN;
+}
+
+/** ПОХА-1: доза по РД п. 7.4, товарный продукт, расход щёлочи (адаптация). */
+function evalPacl1(t: CoagulantType, w: WaterQuality, o: Opts, ctx: Ctx | undefined, r: MethodResult) {
+  const v = need(r, w, [["permanganate", "Перманганатная окисляемость ПО", "мг O₂/л"]]);
+  negative(r, w, ["permanganate", "alkalinity"]);
+  if (r.status !== "ok") return;
+  const deq = RD_K * v.permanganate;
+  const dox = deq * eqMass(t, "Al2O3");
+  r.rows.push({ label: "1. Доза по эквиваленту, РД п. 7.4", formula: `Dэкв = 0,07 · ${f(v.permanganate)}`, result: `${f(deq)} мг-экв/л` });
+  const inRange = deq >= RD_TYPICAL.min && deq <= RD_TYPICAL.max;
+  r.rows.push({ label: "2. Проверка, РД п. 6.5", formula: "0,3–1,5 мг-экв/л", result: inRange ? "в диапазоне" : "ВНЕ типового диапазона" });
+  if (!inRange) r.warnings!.push(`Dэкв = ${f(deq)} мг-экв/л вне типового диапазона 0,3–1,5 мг-экв/л (РД, п. 6.5): обязательна пробная коагуляция.`);
+  r.rows.push({ label: "3. Доза по Al₂O₃ (основная база, ГОСТ Р 51642-2000)", formula: `${f(deq)} × ${f(eqMass(t, "Al2O3"), 2)} (102/6)`, result: `${f(dox)} мг/л Al₂O₃` });
+  r.rows.push({ label: "   то же по Al (ГОСТ 34879-2022, прил. Ж)", formula: `${f(dox)} × ${AL2O3_TO_AL.toString().replace(".", ",")}`, result: `${f(dox * AL2O3_TO_AL)} мг/л Al` });
+  const C = cAl2O3(t, ctx), rho = ctx?.product?.density ?? null;
+  if (isNum(C) && C > 0) {
+    const dt = (dox * 100) / C;
+    r.rows.push({ label: "4. Товарный продукт", formula: `${f(dox)} × 100 / ${f(C, 2)} %`, result: `${f(dt, 2)} мг/л (г/м³)` });
+    if (isNum(rho) && rho > 0) r.rows.push({ label: "   объём товарного продукта", formula: `${f(dt, 2)} / ${f(rho, 3)}`, result: `${f(dt / rho, 1)} мл/м³` });
+    r.rows.push({ label: "   рабочий раствор по ГОСТ Р 51642-2000, п. 5.4.2", formula: `m = 1,0 · 100 / ${f(C, 2)}`, result: `${f(workingSolutionMass(C), 2)} г товарного продукта на 1 дм³ (1 см³ на 1 дм³ пробы = 1 мг/дм³ Al₂O₃)` });
+  } else r.rows.push({ label: "4. Товарный продукт", formula: "нужна доля Al₂O₃ в паспорте продукта", result: "не рассчитан" });
+  // 5. Щёлочь — инженерная адаптация
+  const B = ctx?.product?.basicity, alk = w.alkalinity;
+  if (isNum(B) && isNum(alk)) {
+    const dAlk = deq * (1 - B / 100), rest = alk - dAlk;
+    const reag = o.alkali === "Na2CO3" ? "Na2CO3" : "CaO";
+    const K = K_ALK[reag];
+    const dsh = K * (dAlk - alk) + 1;
+    r.rows.push({ label: "5. Снижение щёлочности (адаптация)", formula: `ΔЩ = ${f(deq)} · (1 − ${f(B)}/100)`, result: `${f(dAlk)} мг-экв/л` });
+    r.rows.push({ label: "   остаточная щёлочность", formula: `Щост = ${f(alk)} − ${f(dAlk)}`, result: `${f(rest)} мг-экв/л` });
+    r.rows.push({ label: `   подщелачивание, СНиП п. 6.19 (${reag === "CaO" ? "известь по CaO" : "сода по Na₂CO₃"}), адаптация`, formula: `Дщ = ${K} · (${f(dAlk)} − ${f(alk)}) + 1`, result: dsh > 0 ? `${f(dsh, 2)} мг/л — требуется` : `${f(dsh, 2)} ≤ 0 — не требуется` });
+    if (dsh > 0) r.warnings!.push(`По адаптированной формуле СНиП п. 6.19 требуется подщелачивание: Дщ ≈ ${f(dsh, 2)} мг/л ${reag === "CaO" ? "CaO" : "Na₂CO₃"}.`);
+    if (rest < 1) r.warnings!.push(`Остаточная щёлочность ${f(rest)} мг-экв/л ниже 0,5–1 мг-экв/л — проверить необходимость подщелачивания пробной коагуляцией.`);
+    r.warnings!.push(ALK_ADAPT_NOTE);
+  } else r.rows.push({ label: "5. Расход щёлочи", formula: "нужны щёлочность воды Щ₀ и основность B из паспорта", result: "не рассчитан" });
+  if (isNum(w.turbidityMg) && (w.turbidityMg as number) > 50) r.warnings!.push("Мутная вода (М > 50–100 мг/л): окисляемость не отражает нагрузку — требуется пробное коагулирование.");
+  r.central = r.low = r.high = dox;
+}
+
+const pacl1: BuiltinDef = {
+  id: "rd-153-34.1-37.502-2000-7.4-pacl",
+  version: 1,
+  title: "РД 153-34.1-37.502-2000, п. 7.4 — полиоксихлорид алюминия (ПОХА) по ГОСТ 34879-2022 — по перманганатной окисляемости",
+  doc: "РД 153-34.1-37.502-2000; ГОСТ 34879-2022; ГОСТ Р 51642-2000",
+  clause: "РД пп. 5.2.1 (табл. 1), 5.2.4, 6.5, 7.4; ГОСТ 34879-2022 п. 4.1, прил. Б, Ж; ГОСТ Р 51642-2000 п. 5.4.2; СНиП 2.04.02-84* п. 6.19 (СП 31.13330.2021 п. 9.16)",
+  fileRef: { file: "docs/normative/RD_153-34.1-37.502-2000.txt", origin: "meganorm.ru/Data2/1/4294812/4294812827.htm" },
+  status: "normative",
+  statusNote: "Нормативная для предочистки на ТЭС и в котельных; для ВОС — справочно, только предварительная оценка до пробного коагулирования.",
+  adapted: ["Расход щёлочи: ΔЩ = Dэкв·(1 − B/100) и подстановка ΔЩ вместо Дк/ек в формулу (7) СНиП п. 6.19"],
+  coagulants: { PACl: "direct" },
+  area: "Ни один действующий нормативный документ РФ не содержит формулы дозы ПОХА по показателям исходной воды. Ориентировочная формула есть только в отраслевом РД (п. 7.4) — для коагулянтов вообще; оксихлорид алюминия входит в перечень РД (п. 5.2.1, табл. 1; п. 5.2.4).",
+  formula: "Dэкв = 0,07·ПО, мг-экв/л; DAl₂O₃ = 17·Dэкв ≈ 1,19·ПО; DAl = 0,5292·DAl₂O₃; Dтов = DAl₂O₃·100/C; Vтов = Dтов/ρ; ΔЩ = Dэкв·(1 − B/100); Дщ = Кщ·(ΔЩ − Щ₀) + 1",
+  formulaCheck: "secondary",
+  outputBasis: () => "Al2O3",
+  recommended: { tes: ["PACl"] },
+  options: [{ key: "alkali", label: "Подщелачивающий реагент", kind: "select", default: "CaO", choices: [["CaO", "известь (по CaO), Кщ = 28"], ["Na2CO3", "сода (по Na₂CO₃), Кщ = 53"]] }],
+  required: () => ["permanganate", "alkalinity"],
+  warnings: [
+    "Формула РД не учитывает pH, температуру, мутность и фракционный состав органики — оценка приблизительная.",
+    "Высокоосновный ПОХА на практике часто работает при меньших дозах Al₂O₃, чем сульфат алюминия, — формула РД даёт консервативную оценку сверху; итоговая доза — по пробной коагуляции.",
+    "Для мутных вод (М > 50–100 мг/л) окисляемость не отражает нагрузку — требуется пробное коагулирование.",
+  ],
+  quotes: [
+    { clause: "РД п. 5.2.1, табл. 1", check: "text", text: "Оксихлорид алюминия Al₂(ОН)ₙCl₍₆₋ₙ₎ — содержание Al₂O₃ 40–44 вес. % (табл. 1 «Алюминий содержащие коагулянты»)." },
+    { clause: "РД п. 5.2.4", check: "text", text: "Оксихлорид алюминия — это продукт гидролиза хлорида алюминия, в котором степень основности определяется как отношение количества ОН-группы к числу атомов алюминия. Преимущество этого реагента перед сульфатом алюминия заключается в том, что он лишь минимально увеличивает содержание в коагулированной воде анионов сильных кислот и эффективно работает в более широком диапазоне рН." },
+    { clause: "РД п. 6.5", check: "text", text: "Как правило, требуемые дозы коагулянта находятся в пределах 0,3 - 1,5 мг-экв/л, устанавливаются экспериментально для каждого водоисточника в различные характерные периоды года в лабораторных условиях и уточняются при эксплуатации по результатам обработки воды." },
+    { clause: "РД п. 7.4", check: "secondary", text: "Дозу коагулянта следует принимать по результатам пробной коагуляции воды или по данным эксплуатации водоподготовительных установок, использующих ту же исходную воду. При отсутствии экспериментальных данных можно использовать ориентировочную формулу [Dк = 0,07·ПО, мг-экв/л — в тексте-источнике формула не воспроизведена; коэффициент сверен по лекционным материалам ТПУ; требуется сверка с официальным текстом РД]." },
+    { clause: "ГОСТ 34879-2022, п. 4.1", check: "text", text: "Товарная форма ПОХА — жидкая или твердая в зависимости от концентрации основного вещества в пересчете на Al₂O₃ (от 7,0 % до 50,0 %)." },
+    { clause: "ГОСТ 34879-2022, прил. Ж", check: "text", text: "Основность В, %, — отношение молярных содержаний гидроксид-ионов и ионов алюминия: В = [ОН⁻] / (3·[Al³⁺]) · 100 (Ж.1). ... 0,5292 — коэффициент пересчета Al₂O₃ на Al." },
+    { clause: "ГОСТ Р 51642-2000, п. 5.4.2", check: "text", text: "Для приготовления рабочего раствора пробу коагулянта, содержащую 1,0 г оксида (III), переносят в мерную колбу вместимостью 1 дм³, доводят объем раствора дистиллированной водой до метки и перемешивают." },
+    { clause: "СНиП 2.04.02-84*, п. 6.19, ф. (7)", check: "text", text: "Дозы подщелачивающих реагентов Дщ, мг/л, необходимых для улучшения процесса хлопьеобразования, надлежит определять по формуле Дщ = Кщ(Дк/ек − Щ₀) + 1, где Дк — максимальная в период подщелачивания доза безводного коагулянта, мг/л; ек — эквивалентная масса коагулянта (безводного), мг/мг-экв, принимаемая для Al₂(SO₄)₃ – 57, FeCl₃ – 54, Fe₂(SO₄)₃ – 67; Кщ — коэффициент, равный для извести (по СаО) — 28, для соды (по Na₂CO₃) — 53; Щ₀ — минимальная щелочность воды, мг-экв/л." },
+  ],
+  evaluate(t, w, o, ctx) {
+    const r = empty("Al2O3");
+    if (!this.coagulants[t]) { r.status = "invalid"; r.errors.push(`Методика не применяется к ${PROFILES[t].label}.`); return r; }
+    evalPacl1(t, w, o, ctx, r);
+    if (r.status !== "ok") return r;
+    if (o.objectType === "vos") r.warnings!.push("Для ВОС методика справочная: предварительная оценка до пробного коагулирования по ГОСТ Р 51642-2000, прил. А.");
+    r.warnings!.push(...this.warnings, NOT_FINAL);
+    r.info!.push(`Формула п. 7.4: ${SECONDARY_SHORT} (коэффициент сверен по лекционным материалам ТПУ).`);
+    return r;
+  },
+};
+
+const jar: BuiltinDef = {
+  id: "gost-r-51642-2000-a-jar",
+  version: 1,
+  title: "ГОСТ Р 51642-2000, приложение А; СП 31.13330.2021, пп. 9.2, 9.15 — оптимальная доза по пробному коагулированию",
+  doc: "ГОСТ Р 51642-2000 «Коагулянты для хозяйственно-питьевого водоснабжения. Общие требования и метод определения эффективности»; СП 31.13330.2021",
+  clause: "ГОСТ Р 51642-2000 пп. 3.7, 5.4.2, табл. 1, прил. А (А.3–А.5); СП 31.13330.2021 пп. 9.2, 9.15",
+  fileRef: { file: "docs/normative/GOST_R_51642-2000.pdf", origin: "приложенный файл" },
+  status: "normative",
+  statusNote: "Основная методика для проектной дозы на ВОС (питьевая вода).",
+  coagulants: { PACl: "direct", "Al2(SO4)3": "direct" },
+  area: "Хозяйственно-питьевое водоснабжение. Доза в пересчёте на оксид Al₂O₃ (п. 3.7). Железосодержащие коагулянты (база Fe₂O₃) в сервисе пока не поддержаны.",
+  formula: "Dопт = min{ D : все нормативы выполнены } по серии 1, 2, 3…n мг/дм³ Al₂O₃; Dпроект = max по периодам года; m = 1,0·100/C г на 1 дм³ рабочего раствора",
+  formulaCheck: "text",
+  outputBasis: () => "Al2O3",
+  recommended: { vos: ["PACl"], tes: [] },
+  options: [],
+  required: () => [],
+  warnings: [
+    "Оптимальная доза — наименьшая, обеспечивающая все нормативы (ГОСТ Р 51642-2000, п. 3.7, А.5); неизмеренный нормируемый показатель не позволяет принять дозу.",
+    "Нормативы — редактируемый справочник; по умолчанию значения СанПиН 1.2.3685-21 — проверить по действующей редакции.",
+    "В проект — максимальная из оптимальных доз по характерным периодам года и диапазон регулирования дозаторов (СП 31.13330.2021, п. 9.15).",
+  ],
+  quotes: [
+    { clause: "п. 3.7", check: "text", text: "Оптимальная доза коагулянта: Наименьшее количество коагулянта в пересчете на оксид (III) основного вещества, мг/дм³, необходимое для достижения нормативов [1] по мутности, цветности, перманганатной окисляемости, алюминию, железу и водородному показателю в 1 дм³ воды источника водоснабжения." },
+    { clause: "п. 5.4.2", check: "text", text: "Для приготовления рабочего раствора пробу коагулянта, содержащую 1,0 г оксида (III), переносят в мерную колбу вместимостью 1 дм³, доводят объем раствора дистиллированной водой до метки и перемешивают." },
+    { clause: "табл. 1", check: "text", text: "Модельная суспензия мутности: мутность 1,5 мг/дм³; цветность не более 20°; алюминий для алюмосодержащих коагулянтов не более 0,5 мг/дм³; железо для железосодержащих не более 0,3 мг/дм³; pH в пределах 6–9." },
+    { clause: "А.3", check: "text", text: "Испытания проводят при температурах (4 ± 1) °С и (20 ± 1) °С. Допускается проводить испытания при температуре, равной температуре воды источника водоснабжения, поступающей на стадию коагуляции. Перед проведением испытаний в воде источника водоснабжения определяют мутность, цветность, железо, алюминий, перманганатную окисляемость и водородный показатель." },
+    { clause: "А.4.2–А.4.5", check: "text", text: "Скорость перемешивания — 140 об/мин. ... В первый, второй, третий ... n-ный стаканы ... добавляют соответственно по 1, 2, 3 ... n см³ рабочего раствора ... Массовая концентрация коагулянта в пересчете на оксид основного вещества ... составит соответственно 1, 2, 3 ... n мг/дм³. Время перемешивания — 3 мин. После этого скорость ... переключают на 40 об/мин и перемешивают 15 мин. ... Время отстаивания растворов — 30 мин. После отстаивания осветленную часть воды ... фильтруют через ... бумажные однослойные фильтры." },
+    { clause: "А.5", check: "text", text: "Оптимальной для воды источника водоснабжения является наименьшая доза коагулянта, обеспечивающая достижение показателей качества питьевой воды по А.4.6, отвечающих требованиям [1]." },
+  ],
+  evaluate(t, w, o, ctx) {
+    const r = empty("Al2O3");
+    if (!this.coagulants[t]) { r.status = "invalid"; r.errors.push(`Методика не применяется к ${PROFILES[t].label} (база Fe₂O₃ пока не поддержана).`); return r; }
+    const C = cAl2O3(t, ctx);
+    if (isNum(C) && C > 0) r.rows.push({ label: "Рабочий раствор, п. 5.4.2", formula: `m = 1,0 · 100 / ${f(C, 2)} %`, result: `${f(workingSolutionMass(C), 2)} г товарного продукта на 1 дм³` });
+    const tests = (ctx?.jar?.tests ?? []).filter((x) => x.coagulantType === t);
+    const norms = ctx?.jar?.norms;
+    const sd = norms ? seasonalDesign(tests, norms) : null;
+    if (sd && norms) {
+      r.rows.push({ label: "Нормативы", formula: norms.name, result: norms.source });
+      const sl = (s: string) => SEASONS.find((x) => x[0] === s)?.[1] ?? s;
+      for (const x of sd.results) {
+        const fail = x.checks.length ? x.checks[x.checks.length - 1] : null;
+        r.rows.push({ label: `Опыт ${x.test.date || "без даты"} · ${sl(x.test.season)}${isNum(x.test.temperature) ? ` · ${f(x.test.temperature, 1)} °C` : ""}`, formula: `${x.checks.length} доз`, result: x.optimal !== null ? `Dопт = ${f(x.optimal)} мг/л Al₂O₃` : `оптимальная доза не найдена${fail ? `: при ${f(fail.dose)} мг/л — ${[...fail.fails, ...fail.unknown.map((u) => `${u} не измерен`)].join(", ")}` : ""}` });
+      }
+    }
+    if (sd && sd.design !== null) {
+      for (const s of sd.bySeason) r.rows.push({ label: `Период: ${SEASONS.find((x) => x[0] === s.season)?.[1]}`, formula: "наибольшая из оптимальных в периоде", result: `${f(s.optimal)} мг/л Al₂O₃` });
+      r.rows.push({ label: "Проектная доза (СП 31.13330.2021, п. 9.15)", formula: "max по периодам; регулирование от min", result: `${f(sd.min as number)}…${f(sd.design)} мг/л Al₂O₃` });
+      r.central = r.high = sd.design; r.low = sd.min as number;
+      if (sd.bySeason.length < 2) r.warnings!.push("Опыты только для одного периода года: оптимальные дозы нужны для характерных периодов (паводок, межень, ледостав) — СП 31.13330.2021, п. 9.15.");
+      r.warnings!.push(...this.warnings);
+      return r;
+    }
+    // нет экспериментальных данных — предварительная оценка
+    r.warnings!.push(tests.length ? "Ни в одном опыте не найдена доза, обеспечивающая все нормативы: расширьте серию доз или проверьте измерения." : "Нет данных пробного коагулирования.");
+    if (t === "PACl") {
+      r.rows.push({ label: "Без данных опытов", formula: "методика ПОХА-1 (РД п. 7.4)", result: PRELIM_BANNER });
+      evalPacl1(t, w, o, ctx, r);
+      if (r.status !== "ok") return r;
+      r.warnings!.unshift(PRELIM_BANNER);
+      r.warnings!.push(NOT_FINAL);
+      return r;
+    }
+    r.status = "nodata"; r.missing.push("результаты пробного коагулирования");
+    return r;
+  },
+};
+
+const fromSA: BuiltinDef = {
+  id: "ref-pacl-from-alum",
+  version: 1,
+  title: "Справочный пересчёт: доза ПОХА по дозе сульфата алюминия и коэффициенту эффективности k",
+  doc: "Пересчёт по молярным массам; k — по данным пробной коагуляции или производителя",
+  clause: "без нормативного пункта",
+  fileRef: null,
+  status: "reference",
+  coagulants: { PACl: "direct" },
+  area: "Справочно, без нормативного статуса. Значения k по умолчанию не подставляются.",
+  formula: "DAl₂O₃(СА) = DСА · 102/342 ≈ 0,298·DСА; DAl₂O₃(ПОХА) = k · DAl₂O₃(СА)",
+  formulaCheck: "text",
+  outputBasis: () => "Al2O3",
+  options: [
+    { key: "dSA", label: "Доза сульфата алюминия (безводного), DСА", kind: "number", default: "", unit: "мг/л", hint: "обязательно" },
+    { key: "k", label: "Коэффициент эффективности k", kind: "number", default: "", unit: "—", hint: "по пробной коагуляции или данным производителя; по умолчанию не задаётся" },
+  ],
+  required: () => [],
+  warnings: ["Справочно, без нормативного статуса."],
+  quotes: [],
+  evaluate(t, _w, o) {
+    const r = empty("Al2O3");
+    if (!this.coagulants[t]) { r.status = "invalid"; r.errors.push(`Методика не применяется к ${PROFILES[t].label}.`); return r; }
+    const d = num(o.dSA), k = num(o.k);
+    if (d === null) r.missing.push("доза сульфата алюминия DСА");
+    if (k === null) r.missing.push("коэффициент эффективности k");
+    if (r.missing.length) { r.status = "nodata"; return r; }
+    if (!isNum(d) || !isNum(k) || d < 0 || k <= 0) { r.status = "invalid"; r.errors.push("DСА ≥ 0 и k > 0 — числа."); return r; }
+    const ratio = eqMass("Al2(SO4)3", "Al2O3") / eqMass("Al2(SO4)3", "salt");
+    const sa = d * ratio;
+    r.rows.push({ label: "Сульфат алюминия по Al₂O₃", formula: `${f(d)} × ${f(ratio, 4)} (101,96/342,15)`, result: `${f(sa)} мг/л Al₂O₃` });
+    r.rows.push({ label: "ПОХА по Al₂O₃", formula: `k · ${f(sa)} = ${f(k)} · ${f(sa)}`, result: `${f(k * sa)} мг/л Al₂O₃` });
+    r.central = r.low = r.high = k * sa;
+    r.warnings!.push(...this.warnings, NOT_FINAL);
+    return r;
+  },
+};
+
+export const BUILTIN_METHODS: BuiltinDef[] = [snip, rd, pacl1, jar, fromSA, rodriguez, zxr];
 export const builtinById = (id: string) => BUILTIN_METHODS.find((d) => d.id === id || BUILTIN_PREFIX + d.id === id) ?? null;
 export const builtinsFor = (t: CoagulantType) => BUILTIN_METHODS.filter((d) => d.coagulants[t]);
 export const defaultOptions = (d: BuiltinDef): Opts => Object.fromEntries(d.options.map((o) => [o.key, o.default]));
@@ -343,6 +560,7 @@ export const STATUS_LABEL: Record<DocStatus, string> = {
   normative: "Нормативная",
   reference: "Справочно, без нормативного статуса",
   superseded: "Отменённый документ — справочно",
+  adapted: "Инженерная адаптация",
 };
 
 /** Встроенная методика в виде записи справочника (не хранится у пользователя, строится из кода). */
@@ -358,5 +576,6 @@ export function builtinAsMethod(d: BuiltinDef, t: CoagulantType): DoseMethod {
 
 /** Рекомендуемая методика по типу объекта (ВОС → СНиП п. 6.16 со ссылкой на СП 31.13330.2021; ТЭС → РД п. 7.4). */
 export function recommendedBuiltin(obj: ObjectType, t: CoagulantType): BuiltinDef | null {
-  return builtinsFor(t).find((d) => d.recommendedFor === obj) ?? null;
+  const list = builtinsFor(t);
+  return list.find((d) => d.recommended?.[obj]?.includes(t)) ?? list.find((d) => !d.recommended && d.recommendedFor === obj) ?? null;
 }

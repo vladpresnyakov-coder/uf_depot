@@ -47,6 +47,7 @@ export function ProductEditor({ initial, onSave, onCancel }: { initial: Product;
         <F label="База концентрации *"><select value={p.concentrationBasis ?? ""} onChange={(e) => set("concentrationBasis", (e.target.value || null) as Basis | null)}><option value="">— не задана —</option>{bases.map(([b, l]) => <option key={b} value={b}>{l}</option>)}</select></F>
         {p.form === "liquid" && <F label="Плотность товарного раствора, кг/л *"><NumInput value={p.density} onChange={(v) => set("density", v)} /></F>}
         {P.usesBasicity && <F label="Основность, %"><NumInput value={p.basicity} onChange={(v) => set("basicity", v)} /></F>}
+        {P.usesBasicity && <F label="Марка по ГОСТ 34879-2022"><select value={p.pohaGrade ?? ""} onChange={(e) => set("pohaGrade", e.target.value as Product["pohaGrade"])}><option value="">не указана</option><option value="НО">НО — низкоосновный</option><option value="СО">СО — среднеосновный</option><option value="ВО">ВО — высокоосновный</option></select></F>}
         {P.usesBasicity && <F label="Определение основности"><input value={p.basicityDefinition} onChange={(e) => set("basicityDefinition", e.target.value)} placeholder="напр. [OH]/(3·[Al]), мольн. %" /></F>}
         <F label="Свободная кислотность" hint="если указана в паспорте"><NumInput value={p.freeAcidity} onChange={(v) => set("freeAcidity", v)} /></F>
         {P.metal === "Fe" && <F label="Доля Fe²⁺ от Fe общ., %"><NumInput value={p.fe2Share} onChange={(v) => set("fe2Share", v)} /></F>}

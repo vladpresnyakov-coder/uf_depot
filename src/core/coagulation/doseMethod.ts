@@ -6,7 +6,7 @@
 import { isNum } from "../units/chem";
 import { evaluate, identifiers, parse } from "./expr";
 import type { Basis, CoagulantType } from "./profiles";
-import { builtinById, type Opts } from "./normative";
+import { builtinById, type Ctx, type Opts } from "./normative";
 
 /** Показатели исходной воды, доступные методикам. Единицы фиксированы. */
 export const WATER_PARAMS = {
@@ -127,13 +127,13 @@ export function validateMethod(m: DoseMethod): string[] {
   return e;
 }
 
-export function evaluateMethod(m: DoseMethod, water: WaterQuality, product: ProductVars, opts: Opts = {}): MethodResult {
+export function evaluateMethod(m: DoseMethod, water: WaterQuality, product: ProductVars, opts: Opts = {}, jar?: Ctx["jar"]): MethodResult {
   const out: MethodResult = { status: "ok", missing: [], outside: [], errors: [], central: NaN, low: NaN, high: NaN, basis: m.outputBasis, rows: [] };
   if (m.model === "manual") { out.status = "manual"; return out; }
   if (m.model === "builtin") {
     const def = m.builtinId ? builtinById(m.builtinId) : null;
     if (!def) { out.status = "invalid"; out.errors.push("Встроенная методика не найдена."); return out; }
-    const r = def.evaluate(m.coagulantType, water, opts);
+    const r = def.evaluate(m.coagulantType, water, opts, { product, jar });
     r.rows.unshift({ label: "Методика", formula: `${def.doc}, ${def.clause} · v${def.version}`, result: def.status === "normative" ? "нормативная" : def.status === "superseded" ? "отменённый документ, справочно" : "справочная" });
     return r;
   }

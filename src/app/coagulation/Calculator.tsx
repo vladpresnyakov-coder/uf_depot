@@ -8,6 +8,8 @@ import { loadCatalog, saveCatalog, seedCatalog, normalizeCatalog, emptyProduct, 
 import { useMe } from "@/lib/account";
 import { SaveCalc } from "@/components/SaveCalc";
 import { BuiltinCard } from "@/components/BuiltinCard";
+import { JarPanel } from "./JarPanel";
+import { metalFraction } from "@/core/coagulation/profiles";
 import { builtinAsMethod, builtinById, builtinsFor, defaultOptions, recommendedBuiltin, OBJECT_TYPES, STATUS_LABEL, type ObjectType, type Opts } from "@/core/coagulation/normative";
 
 /** Методики типа: ручная доза, встроенные (нормативные и справочные), методики пользователя. */
@@ -21,6 +23,12 @@ import { t } from "@/i18n/ru";
 type S = Record<string, string>;
 const DEMO_WATER: Partial<Record<WaterKey, string>> = { pH: "7,4", alkalinity: "2,1", temperature: "8", turbidity: "6", color: "35", permanganate: "6,8", tss: "8", al: "0,05", fe: "0,3" };
 const STAR = "★";
+const JAR_ID = "gost-r-51642-2000-a-jar";
+/** Доля Al₂O₃ в товарном продукте, % — из паспорта (любая база, кроме «товарный»). */
+function al2o3Pct(p: Product | null, t: CoagulantType): number {
+  if (!p || p.concentration == null || !p.concentrationBasis || p.concentrationBasis === "product" || PROFILES[t].metal !== "Al") return NaN;
+  return (p.concentration * metalFraction(t, p.concentrationBasis, p.hydrateN)) / metalFraction(t, "Al2O3");
+}
 
 export default function CoagulationCalculator() {
   const [cat, setCat] = useState<Catalog | null>(null);
@@ -116,7 +124,7 @@ export default function CoagulationCalculator() {
       flow: flow.mode === "uf" ? { mode: "uf", trains: toNum(flow.trains), perTrain: toNum(flow.perTrain), minOverride: toNum(flow.minO), maxOverride: toNum(flow.maxO) } : { mode: "coag", nom: toNum(flow.nom), min: toNum(flow.min), max: toNum(flow.max) },
       dose: isManual
         ? { mode: "manual", min: toNum(manualDose.min), nom: toNum(manualDose.nom), max: toNum(manualDose.max), basis: manualDose.basis, hydrateN: pr?.hydrateN ?? null }
-        : { mode: "method", method, options: opts, accepted: toNum(accepted), min: null, nom: null, max: null, basis: method!.outputBasis, hydrateN: pr?.hydrateN ?? null },
+        : { mode: "method", method, options: { ...opts, objectType: objType }, jar: builtin?.id === JAR_ID ? { tests: (cat.jarTests ?? []).filter((x) => x.coagulantType === coag), norms: cat.norms } : undefined, accepted: toNum(accepted), min: null, nom: null, max: null, basis: method!.outputBasis, hydrateN: pr?.hydrateN ?? null },
       water: w,
       ph: { mode: ph.mode, reagent: ph.reagent, method: ph.method, dose100: toNum(ph.d100), target: toNum(ph.target), curve: [[0, 7.1], [5, 7.4], [10, 7.7], [15, 7.95]], massFraction: toNum(ph.w), density: toNum(ph.rho), working100: toNum(ph.wc) },
       contact: { calc: contact.calc, time: toNum(contact.time), timeBasis: contact.timeBasis, volume: toNum(contact.volume), flowBasis: contact.flowBasis, k: toNum(contact.k), kBasis: contact.kBasis },
@@ -131,7 +139,7 @@ export default function CoagulationCalculator() {
       if (!r.ok) { setErr(j.error ?? "Ошибка расчёта"); setRes(null); } else setRes(j.result);
     } catch { setErr("Сервер расчёта недоступен."); }
     setBusy(false);
-  }, [cat, coag, product, method, isManual, manualDose, accepted, flow, water, ph, contact, pipe, pumps, ox, JSON.stringify(opts)]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cat, coag, product, method, isManual, manualDose, accepted, flow, water, ph, contact, pipe, pumps, ox, JSON.stringify(opts), objType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { if (cat && productId !== undefined && first.current) { first.current = false; run(); } }, [cat, productId, methodId, run]);
 
@@ -232,7 +240,7 @@ export default function CoagulationCalculator() {
               <Select id="obj" label="Тип объекта" value={objType} options={OBJECT_TYPES} onChange={(v) => setObjType(v as ObjectType)} />
             </div>
             {objType !== "other" && (rec
-              ? <p className="small" style={{ margin: "6px 0 0" }}>Рекомендуемая: {rec.title.split(" — ")[0]}{objType === "vos" ? " (действующий документ — СП 31.13330.2021: доза по пробной коагуляции)" : ""}. {method?.builtinId !== rec.id && <button type="button" className="linkbtn" onClick={() => { setMethodId(builtinAsMethod(rec, coag).id); setAccepted(""); }}>Выбрать</button>}</p>
+              ? <p className="small" style={{ margin: "6px 0 0" }}>Рекомендуемая: {rec.title.split(" — ")[0]}{objType === "vos" && rec.id !== JAR_ID ? " (действующий документ — СП 31.13330.2021: доза по пробной коагуляции)" : ""}{coag === "PACl" && objType === "tes" ? " + пробное коагулирование по ГОСТ Р 51642-2000" : ""}{coag === "PACl" && objType === "vos" ? "; методика РД п. 7.4 — только как предварительная оценка" : ""}. {method?.builtinId !== rec.id && <button type="button" className="linkbtn" onClick={() => { setMethodId(builtinAsMethod(rec, coag).id); setAccepted(""); }}>Выбрать</button>}</p>
               : <p className="small muted" style={{ margin: "6px 0 0" }}>Для {P.label} рекомендуемой встроенной методики для этого типа объекта нет.</p>)}
             {method && !editMethod && (builtin ? <BuiltinCard d={builtin} compact /> : <MethodSummary m={method} t={coag} />)}
           </div>
@@ -296,6 +304,11 @@ export default function CoagulationCalculator() {
               </>
             )}
           </div>
+
+          {builtin?.id === JAR_ID && (
+            <JarPanel cat={cat} coag={coag} productName={product?.name ?? ""} cPct={al2o3Pct(product, coag)}
+              source={Object.fromEntries((["turbidityMg", "color", "permanganate", "al", "fe", "pH", "alkalinity"] as const).map((k) => [k, toNum(water[k] ?? "")]))} onCommit={commit} />
+          )}
 
           {/* ===== Коррекция pH ===== */}
           <div className="panel">
